@@ -21,7 +21,9 @@ import os
 import re
 import sys
 import io
+import hashlib
 import tempfile
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from core import search, DATA_DIR
@@ -990,7 +992,22 @@ def safe_slug(name, fallback: str = "default") -> str:
     '.') collapses into '-'. This makes path traversal via project/page names
     (e.g. "../../etc") impossible — the slug can never leave its parent dir.
     """
-    slug = re.sub(r'[^a-z0-9_-]+', '-', str(name).lower()).strip('-')
+    # Bản sửa của kho TikFlash: bản gốc vứt mọi ký tự ngoài [a-z0-9_-] nên
+    # "Nền tảng" và "Nến tăng" cùng ra "n-n-t-ng", lượt lưu sau bị bỏ qua hoặc
+    # (với --force) đè mất hệ thiết kế của trang kia. Bỏ dấu cho slug đọc được
+    # ("nen-tang"), nhưng bỏ dấu vẫn trùng nhau, nên khi tên gốc có ký tự bị
+    # biến đổi thì gắn thêm 8 ký tự băm của TÊN GỐC để hai tên khác nhau luôn
+    # ra hai thư mục khác nhau. 'đ' không tách được bằng NFD, phải đổi riêng.
+    raw = str(name)
+    text = raw.replace('đ', 'd').replace('Đ', 'D')
+    text = ''.join(c for c in unicodedata.normalize('NFD', text)
+                   if not unicodedata.combining(c))
+    slug = re.sub(r'[^a-z0-9_-]+', '-', text.lower()).strip('-')
+    if slug and slug != raw:
+        lossless = re.fullmatch(r'[a-z0-9_-]+', raw.lower().replace(' ', '-')) is not None
+        if not lossless:
+            digest = hashlib.sha1(raw.encode('utf-8')).hexdigest()[:8]
+            slug = f"{slug}-{digest}"
     return slug or fallback
 
 
@@ -1011,7 +1028,17 @@ def _write_persisted_file(path: Path, content: str, force: bool) -> None:
         else:
             # A same-filesystem hard link atomically publishes only if the
             # destination is absent. Losing writers get FileExistsError.
-            os.link(temp_name, path)
+            try:
+                os.link(temp_name, path)
+            except FileExistsError:
+                raise
+            except OSError:
+                # Bản sửa của kho TikFlash: một số ổ (bind-mount Docker Desktop
+                # trên Windows, FAT/exFAT, ổ mạng) không hỗ trợ hard link và ném
+                # OSError chung chứ không phải FileExistsError. Rơi về tạo tệp
+                # độc quyền ('x'): vẫn không đè tệp đã có, chỉ mất tính nguyên tử.
+                with open(path, 'x', encoding='utf-8') as out:
+                    out.write(content)
     finally:
         if temp_name and os.path.exists(temp_name):
             os.unlink(temp_name)
