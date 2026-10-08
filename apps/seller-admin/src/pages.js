@@ -321,7 +321,16 @@ textarea{min-height:80px;resize:vertical}
 .settings-jump a:hover{border-color:var(--pri);background:var(--wash);color:var(--prid);text-decoration:none}
 .settings-jump small{display:block;color:var(--mut);font-weight:400;margin-top:3px;line-height:1.45}
 @media(max-width:900px){.settings-jump{grid-template-columns:1fr 1fr}}
-@media(max-width:560px){.settings-jump{grid-template-columns:1fr}}
+/* Điện thoại: trang Cài đặt dài ~10.000px (đo ở 390px) mà bốn nhóm xếp dọc tốn gần một
+   màn hình ngay đầu trang. Thành một dải chip cuộn ngang, dán dưới thanh đen để từ giữa
+   trang vẫn nhảy sang nhóm khác được; dòng mô tả bỏ đi vì tên nhóm đã đủ nghĩa. */
+@media(max-width:560px){
+  .settings-jump{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;position:sticky;top:56px;z-index:50;
+    margin:12px calc(-1 * var(--pad-x));padding:8px var(--pad-x);background:var(--surf);border-bottom:1px solid var(--bd)}
+  .settings-jump a{flex:0 0 auto;padding:10px 14px;border-radius:var(--pill);white-space:nowrap;min-height:44px;display:inline-flex;align-items:center}
+  .settings-jump small{display:none}
+  .content [id]{scroll-margin-top:124px}
+}
 /* Lưới chọn ảnh bìa: radio thuần HTML, không JS. Ảnh đang chọn có viền đậm nhờ
    :checked + selector anh em — cùng lối no-JS đã dùng ở gallery storefront. */
 .covgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;margin:6px 0 4px;max-height:280px;overflow-y:auto;padding:2px}
@@ -1558,7 +1567,7 @@ export function renderShopSettings(ctx, shopId, shop, notice, err, unused, draft
         </div>
         <p class="muted" style="font-size:.8rem;margin:8px 0 4px"><strong>Ngoài bán kính giao tối đa</strong> (vd khách ở tỉnh khác, cách hàng nghìn km):</p>
         <div class="actions" style="align-items:center;flex-wrap:wrap;gap:18px">
-          <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="ship_over_max_behavior" value="region"${overMax === 'region' ? ' checked' : ''} style="width:auto"> Vẫn giao toàn quốc — tính <strong>phí vùng liên miền</strong> ở trên (khuyến nghị)</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="ship_over_max_behavior" value="region"${overMax === 'region' ? ' checked' : ''} style="width:auto"> <span>Vẫn giao toàn quốc — tính <strong>phí vùng liên miền</strong> ở trên (khuyến nghị)</span></label>
           <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="ship_over_max_behavior" value="reject"${overMax === 'reject' ? ' checked' : ''} style="width:auto"> Chỉ giao trong bán kính — từ chối đơn xa</label>
         </div>
         <p class="muted" style="font-size:.8rem;margin:6px 0 0">Phí km = <em>phí cơ bản + (số km × phí mỗi km × hệ số đường bộ)</em>, nhưng không thấp hơn phí vùng. Ví dụ cửa hàng Hà Nội, khách cách 5km: 15.000 + 5×4.000×1.3 ≈ 41.000đ. Khách ở TP.HCM (ngoài bán kính) → rơi về phí liên miền, <strong>không</strong> tính nghìn km. Bật ship theo km <strong>bắt buộc</strong> khai toạ độ + phí cơ bản + phí/km + bán kính, và ở phần trên phải có <strong>tỉnh gửi hàng</strong> + <strong>phí liên miền</strong> (làm mức dự phòng khi khách không bật định vị).</p>
