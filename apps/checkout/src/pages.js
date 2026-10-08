@@ -144,8 +144,13 @@ a:focus-visible,.btn:focus-visible,button:focus-visible,summary:focus-visible{ou
 @media(max-width:860px){
   .wrap.co-wide{max-width:640px}
   .co-grid{grid-template-columns:1fr;gap:14px;margin-top:12px}
+  /* Hai khối cùng khai grid-row:1 cho bản 2 cột. Ở một cột mà chỉ đổi grid-column thì CẢ HAI
+     rơi vào CÙNG MỘT ô lưới: tóm tắt đơn (tên hàng, tổng tiền) nằm lọt SAU thẻ form và khách
+     trên điện thoại không thấy mình đang mua gì (đo bằng ảnh chụp 390px: chỉ lộ một vệt viền).
+     Tóm tắt lên hàng 1, form xuống hàng 2. */
   .co-main,.co-summary{grid-column:1}
-  .co-summary{position:static}
+  .co-summary{grid-row:1;position:static}
+  .co-main{grid-row:2}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}html{scroll-behavior:auto}}`;
 
