@@ -405,6 +405,23 @@ input[type=file]{width:auto;max-width:100%;padding:9px 12px;background:var(--sur
   /* Thanh thao tác hàng loạt: bốn nút xếp dọc mỗi nút một hàng, đo ở 390px chiếm ~430px
      chiều cao trước khi tới dòng đơn đầu tiên. Hai cột: nút ngang hàng, chữ giải thích xuống
      cuối chiếm trọn bề ngang. */
+  /* Danh sách ĐƠN: 11 hàng nhãn-giá trị mỗi đơn (~560px, gần một màn hình) làm người bán
+     cuộn hàng chục màn hình cho 20 đơn. Thành 3 tầng: [chọn · mã đơn · TỔNG TIỀN] / khách /
+     giờ đặt / các nhãn trạng thái xếp ngang. Thứ tự cột là hợp đồng với renderOrders (11 ô);
+     đổi cột thì phải đổi số thứ tự ở đây. DOM không đổi nên Tab và trình đọc màn hình vẫn đi
+     đúng thứ tự cột như bản bảng. */
+  table[data-cards].ordtbl tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:12px 14px}
+  table[data-cards].ordtbl td{width:auto;padding:0;min-height:0;text-align:left;flex:0 0 auto}
+  table[data-cards].ordtbl td::before{display:none}
+  table[data-cards].ordtbl td:nth-child(1){order:0}
+  table[data-cards].ordtbl td:nth-child(2){order:1;flex:1 1 0;font-weight:700;font-size:1.05rem}
+  table[data-cards].ordtbl td:nth-child(11){order:2;font-size:1.05rem;white-space:nowrap}
+  table[data-cards].ordtbl td:nth-child(5){order:3;flex:1 1 100%}
+  table[data-cards].ordtbl td:nth-child(10){order:4;flex:1 1 100%;font-size:13px}
+  table[data-cards].ordtbl td:nth-child(3),table[data-cards].ordtbl td:nth-child(4),table[data-cards].ordtbl td:nth-child(9),
+  table[data-cards].ordtbl td:nth-child(7),table[data-cards].ordtbl td:nth-child(6),table[data-cards].ordtbl td:nth-child(8){order:5}
+  table[data-cards].ordtbl td.stack{flex:1 1 100%}
+  table[data-cards].ordtbl td.msec{display:none}
   form#bulkf{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
   form#bulkf .btn{width:100%;min-width:0;justify-content:center;text-align:center;white-space:normal;line-height:1.25;padding-top:8px;padding-bottom:8px}
   form#bulkf>span.muted{grid-column:1/-1}
@@ -3059,7 +3076,7 @@ export function renderOrders(ctx, shopId, data, filter) {
       { html: `${esc(o.customer_name)}${susp ? ` <span class="badge cancelled" title="Cùng nguồn mạng với ${esc(o.same_ip_phones)} SĐT khác nhau đang chờ xử lý — kiểm tra kẻo đơn ảo">⚠ ${esc(o.same_ip_phones)} SĐT cùng nguồn</span>` : ''}` },
       { cls: o.source || o.is_migrated ? '' : 'msec', html: o.source ? `<span class="badge">${esc(ORDER_SOURCE_LABEL[o.source] ?? o.source)}</span>`
         : (o.is_migrated ? '<span class="muted">Nhập từ sàn cũ</span>' : '<span class="muted">—</span>') },
-      { cls: o.sync_error ? 'stack' : '', html: syncMeta },
+      { cls: o.sync_error ? 'stack' : (!o.sync_status || o.sync_status === 'not_required') && !o.sync_updated_at ? 'msec' : '', html: syncMeta },
       { cls: externalMeta ? '' : 'msec', html: externalMeta || '<span class="muted">—</span>' },
       { cls: Array.isArray(o.attention) && o.attention.length ? '' : 'msec', html: Array.isArray(o.attention) && o.attention.length
         ? o.attention.map((kind) => `<span class="badge cancelled">${esc(kind === 'shipment' && o.shipment_attention_kind === 'orphan' ? 'Mất theo dõi vận đơn' : ORDER_ATTENTION_LABEL[kind] ?? kind)}</span>`).join(' ')
@@ -3184,6 +3201,7 @@ export function renderOrders(ctx, shopId, data, filter) {
         <span class="muted" style="font-size:.82rem">Tích ô ở đầu bảng để chọn cả trang (xác nhận: chỉ đơn "Chờ xử lý"; giao: chỉ đơn đã xác nhận, KHÔNG gồm đơn đang gửi qua hãng vận chuyển${ctx.role === 'owner' ? '; nhận tiền: chỉ đơn COD chưa thu' : ''}; đơn khác tự bỏ qua).</span>
       </form>
       ${tblCards({
+    cls: 'ordtbl',
     head: [
       { html: '<input type="checkbox" data-bulk-all="order_ids" form="bulkf" hidden aria-label="Chọn tất cả đơn trên trang">', label: '' },
       { html: 'Đơn' }, { html: 'Trạng thái' }, { html: 'Thanh toán' }, { html: 'Khách' },
