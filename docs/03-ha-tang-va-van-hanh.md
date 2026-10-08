@@ -155,7 +155,7 @@ services:
     volumes: [redisdata:/data]
 
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio
     command: server /data
     volumes: [miniodata:/data]
 
