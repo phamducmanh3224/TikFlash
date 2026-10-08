@@ -42,7 +42,9 @@ RECUR=""; [ -d "$SRC" ] && RECUR="--recursive"
 : "${BACKUP_S3_ACCESS_KEY:?offsite-s3: thiếu BACKUP_S3_ACCESS_KEY}"
 : "${BACKUP_S3_SECRET_KEY:?offsite-s3: thiếu BACKUP_S3_SECRET_KEY}"
 PREFIX="${BACKUP_S3_PREFIX:-nentang}"
-MC_IMAGE="${MC_IMAGE:-quay.io/minio/mc:latest}"  # Docker Hub ngừng cho kéo image minio (08/10/2026)
+# MinIO ngừng phát image cộng đồng (08/10/2026: minio/mc không còn trên Docker Hub, quay.io
+# đòi đăng nhập) — dùng bản fork pgsty/mc, ghim digest như image server trong compose.
+MC_IMAGE="${MC_IMAGE:-pgsty/mc:RELEASE.2026-09-16T00-00-00Z@sha256:cfc83108c3abb371f8fb84d99c1fdc88f8c237e022409b0081fb7c0a3be634dd}"
 
 # Giữ nguyên cấu trúc thư mục theo mốc thời gian mà backup.sh tạo (…/<TS>/<tên>),
 # để trên kho đối tượng vẫn tra được "bản của lúc nào".

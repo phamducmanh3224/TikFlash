@@ -101,10 +101,12 @@ services:
     deploy: { resources: { limits: { memory: 320m } } }
 
   minio:
-    # Kéo từ quay.io chứ không từ Docker Hub: repo minio/minio trên Docker Hub đã ngừng
-    # cho kéo (08/10/2026 CI trả "pull access denied" ngay bước dựng stack). Cùng bản
-    # phát hành, MinIO vẫn đẩy song song lên quay.io.
-    image: quay.io/minio/minio:RELEASE.2024-10-13T13-34-11Z
+    # MinIO đã ngừng phát image cộng đồng: 08/10/2026 Docker Hub trả "object not found"
+    # cho minio/minio, quay.io trả "unauthorized" — CI chết ngay bước dựng stack.
+    # Dùng bản fork cộng đồng pgsty/minio: cùng entrypoint/CMD với image gốc, có sẵn
+    # `mc` (healthcheck dưới dùng), nên `command`/env/volume giữ nguyên. Ghim DIGEST vì
+    # đây là image của bên thứ ba — tag đổi nội dung thì kéo hỏng chứ không chạy lặng lẽ.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     restart: unless-stopped
     <<: *logging
     command: server /data
