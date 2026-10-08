@@ -390,8 +390,16 @@ input[type=file]{width:auto;max-width:100%;padding:9px 12px;background:var(--sur
      hai con — <a>tên khách</a> + <div>SĐT</div> — bị xếp NGANG cạnh nhau rồi tràn ra ngoài
      thẻ. Đơn/Sản phẩm không lộ vì ô chính của chúng có sẵn một <div> bọc.
      Vị trí tuyệt đối không quan tâm ô có mấy con, nên đúng cho mọi bảng. */
-  table[data-cards] td{border:0;position:relative;padding:6px 0 6px 40%;text-align:right;min-height:20px;overflow-wrap:anywhere}
-  table[data-cards] td::before{content:attr(data-label);position:absolute;left:0;top:6px;width:38%;
+  table[data-cards] td{border:0;position:relative;padding:3px 0 3px 40%;text-align:right;min-height:20px;overflow-wrap:anywhere}
+  /* Ô phụ không có nội dung (chỉ còn dấu gạch) không đáng chiếm một dòng trên thẻ. */
+  table[data-cards] td.msec{display:none}
+  /* Thanh thao tác hàng loạt: bốn nút xếp dọc mỗi nút một hàng, đo ở 390px chiếm ~430px
+     chiều cao trước khi tới dòng đơn đầu tiên. Hai cột: nút ngang hàng, chữ giải thích xuống
+     cuối chiếm trọn bề ngang. */
+  form#bulkf{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+  form#bulkf .btn{width:100%;min-width:0;justify-content:center;text-align:center;white-space:normal;line-height:1.25;padding-top:8px;padding-bottom:8px}
+  form#bulkf>span.muted{grid-column:1/-1}
+  table[data-cards] td::before{content:attr(data-label);position:absolute;left:0;top:3px;width:38%;
     color:var(--mut);font-size:13px;line-height:20px;font-weight:400;text-align:left;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* Ô rỗng (cột hành động trống, cột đệm) không đẻ ra dòng trắng vô nghĩa. */
@@ -530,7 +538,10 @@ a.metric:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:colo
    (-60 + 16 = -44), nên đo thật chỉ đè 44px chứ không phải 60px như spec. */
 .hero-lift{position:relative;z-index:3;margin-top:-60px}
 .hero-lift>.card{margin-top:0}
-@media(max-width:767px){.hero-band{min-height:0;padding-bottom:64px}.hero-lift{margin-top:-48px}}
+@media(max-width:767px){.hero-band{min-height:0;padding-bottom:64px}.hero-lift{margin-top:-48px}
+  /* Điện thoại hẹp: hình thoi trang trí đè lên tên shop và dòng "N việc đang chờ" (đo bằng
+     ảnh chụp 390px). Hạ độ đậm xuống còn nền mờ để chữ luôn đọc được. */
+  .hb-dot{opacity:.22}}
 .dash-hero{position:relative;overflow:hidden;background:linear-gradient(120deg,color-mix(in srgb,var(--brand) 7%,var(--card)),var(--card) 60%);border:1px solid var(--bd);border-radius:var(--r-lg);padding:26px 28px;margin:0 0 20px;box-shadow:var(--sh-sm)}
 .dash-hero::after{content:"";position:absolute;top:-40%;right:-8%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--brand2) 12%,transparent),transparent 70%);pointer-events:none}
 .dash-hero .eyebrow{position:relative;font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:var(--pri);font-weight:800;margin:0 0 4px}
@@ -552,7 +563,7 @@ a:focus-visible,.btn:focus-visible,.shop-card:focus-visible,.metric:focus-visibl
 .admtoggle{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
 /* ☰ là CỬA VÀO toàn bộ điều hướng trên điện thoại, mà đo được chỉ 22×24px. Ngón tay cần
    ~44px; trượt nút này là người bán không mở nổi menu và tưởng app không có gì khác. */
-.admburger{display:none;cursor:pointer;font-size:1.5rem;line-height:1;margin-right:10px;user-select:none;color:var(--ink);
+.admburger{display:none;cursor:pointer;font-size:1.5rem;line-height:1;margin-right:10px;user-select:none;color:#fff;
   min-width:44px;min-height:44px;align-items:center;justify-content:center;margin-left:-10px}
 .admtoggle:focus-visible+.side .side-brand{outline:2.5px solid var(--pri);outline-offset:2px}
 /* Mobile: gom sidebar (25 mục) vào nút ☰ trên topbar (no-JS checkbox). tbar lên trên, side hiện khi ☰. */
@@ -3037,11 +3048,11 @@ export function renderOrders(ctx, shopId, data, filter) {
       { html: badge(o.status, STATUS[o.status] ?? o.status) },
       { html: `${badge(o.payment_status, PAY[o.payment_status] ?? o.payment_status)} <span class="muted">${esc(o.payment_method?.toUpperCase() ?? '')}</span>` },
       { html: `${esc(o.customer_name)}${susp ? ` <span class="badge cancelled" title="Cùng nguồn mạng với ${esc(o.same_ip_phones)} SĐT khác nhau đang chờ xử lý — kiểm tra kẻo đơn ảo">⚠ ${esc(o.same_ip_phones)} SĐT cùng nguồn</span>` : ''}` },
-      { html: o.source ? `<span class="badge">${esc(ORDER_SOURCE_LABEL[o.source] ?? o.source)}</span>`
+      { cls: o.source || o.is_migrated ? '' : 'msec', html: o.source ? `<span class="badge">${esc(ORDER_SOURCE_LABEL[o.source] ?? o.source)}</span>`
         : (o.is_migrated ? '<span class="muted">Nhập từ sàn cũ</span>' : '<span class="muted">—</span>') },
       { cls: o.sync_error ? 'stack' : '', html: syncMeta },
-      { html: externalMeta || '<span class="muted">—</span>' },
-      { html: Array.isArray(o.attention) && o.attention.length
+      { cls: externalMeta ? '' : 'msec', html: externalMeta || '<span class="muted">—</span>' },
+      { cls: Array.isArray(o.attention) && o.attention.length ? '' : 'msec', html: Array.isArray(o.attention) && o.attention.length
         ? o.attention.map((kind) => `<span class="badge cancelled">${esc(kind === 'shipment' && o.shipment_attention_kind === 'orphan' ? 'Mất theo dõi vận đơn' : ORDER_ATTENTION_LABEL[kind] ?? kind)}</span>`).join(' ')
         : '<span class="muted">—</span>' },
       { cls: 'muted', html: dt(o.created_at) },
