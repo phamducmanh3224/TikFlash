@@ -42,7 +42,7 @@ RECUR=""; [ -d "$SRC" ] && RECUR="--recursive"
 : "${BACKUP_S3_ACCESS_KEY:?offsite-s3: thiếu BACKUP_S3_ACCESS_KEY}"
 : "${BACKUP_S3_SECRET_KEY:?offsite-s3: thiếu BACKUP_S3_SECRET_KEY}"
 PREFIX="${BACKUP_S3_PREFIX:-nentang}"
-MC_IMAGE="${MC_IMAGE:-minio/mc:latest}"
+MC_IMAGE="${MC_IMAGE:-quay.io/minio/mc:latest}"  # Docker Hub ngừng cho kéo image minio (08/10/2026)
 
 # Giữ nguyên cấu trúc thư mục theo mốc thời gian mà backup.sh tạo (…/<TS>/<tên>),
 # để trên kho đối tượng vẫn tra được "bản của lúc nào".
