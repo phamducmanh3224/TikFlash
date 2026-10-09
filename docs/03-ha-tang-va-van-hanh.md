@@ -155,7 +155,7 @@ services:
     volumes: [redisdata:/data]
 
   minio:
-    image: minio/minio
+    image: pgsty/minio   # fork cộng đồng; MinIO ngừng phát image từ 10/2026
     command: server /data
     volumes: [miniodata:/data]
 
