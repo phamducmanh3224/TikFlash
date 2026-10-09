@@ -76,8 +76,8 @@ a{color:var(--pri);text-decoration:none}a:hover{text-decoration:underline}
 h1{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;line-height:1.15;text-wrap:balance;margin:.2em 0 .55em;background:linear-gradient(135deg,var(--brand),var(--pri2));-webkit-background-clip:text;background-clip:text;color:transparent}
 h2{font-size:1rem;margin:0 0 .7em;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
 .row{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid color-mix(in srgb,var(--bd) 65%,transparent)}
-.row:last-child{border-bottom:0}.muted{color:var(--mut);font-size:.9rem}.right{text-align:right}
-.it{display:flex;gap:12px}.cthumb{width:56px;height:56px;object-fit:cover;border-radius:var(--r);border:1px solid var(--bd);flex:0 0 auto;background:var(--surf)}.cthumb.ph{border-style:dashed}
+.row:last-child{border-bottom:0}.muted{color:var(--mut);font-size:.9rem}.right{text-align:right;flex:0 0 auto;white-space:nowrap}
+.it{display:flex;gap:12px;min-width:0}.it>div{min-width:0}.cthumb{width:56px;height:56px;object-fit:cover;border-radius:var(--r);border:1px solid var(--bd);flex:0 0 auto;background:var(--surf)}.cthumb.ph{border-style:dashed}
 .tot{display:flex;justify-content:space-between;padding:7px 0;font-variant-numeric:tabular-nums}.tot .muted{font-size:.95rem}.tot.grand{font-weight:800;font-size:1.14rem;letter-spacing:-.01em;border-top:1px solid var(--bd);margin-top:8px;padding-top:12px}
 .btn{display:block;width:100%;text-align:center;background:linear-gradient(135deg,var(--brand),var(--pri2));background-size:150% 150%;color:#fff;border:1.5px solid transparent;border-radius:var(--pill);padding:15px;font-size:1rem;font-weight:600;letter-spacing:-.01em;text-decoration:none;cursor:pointer;box-shadow:var(--sh-pri);transition:transform .1s,background-position .3s,box-shadow .15s}
 .btn:hover{background-position:100% 0;text-decoration:none;transform:translateY(-2px);box-shadow:0 18px 40px -14px color-mix(in srgb,var(--pri) 65%,transparent)}.btn:active{transform:translateY(1px)}
@@ -144,8 +144,13 @@ a:focus-visible,.btn:focus-visible,button:focus-visible,summary:focus-visible{ou
 @media(max-width:860px){
   .wrap.co-wide{max-width:640px}
   .co-grid{grid-template-columns:1fr;gap:14px;margin-top:12px}
+  /* Hai khối cùng khai grid-row:1 cho bản 2 cột. Ở một cột mà chỉ đổi grid-column thì CẢ HAI
+     rơi vào CÙNG MỘT ô lưới: tóm tắt đơn (tên hàng, tổng tiền) nằm lọt SAU thẻ form và khách
+     trên điện thoại không thấy mình đang mua gì (đo bằng ảnh chụp 390px: chỉ lộ một vệt viền).
+     Tóm tắt lên hàng 1, form xuống hàng 2. */
   .co-main,.co-summary{grid-column:1}
-  .co-summary{position:static}
+  .co-summary{grid-row:1;position:static}
+  .co-main{grid-row:2}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}html{scroll-behavior:auto}}`;
 

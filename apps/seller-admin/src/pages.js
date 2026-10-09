@@ -321,7 +321,16 @@ textarea{min-height:80px;resize:vertical}
 .settings-jump a:hover{border-color:var(--pri);background:var(--wash);color:var(--prid);text-decoration:none}
 .settings-jump small{display:block;color:var(--mut);font-weight:400;margin-top:3px;line-height:1.45}
 @media(max-width:900px){.settings-jump{grid-template-columns:1fr 1fr}}
-@media(max-width:560px){.settings-jump{grid-template-columns:1fr}}
+/* Điện thoại: trang Cài đặt dài ~10.000px (đo ở 390px) mà bốn nhóm xếp dọc tốn gần một
+   màn hình ngay đầu trang. Thành một dải chip cuộn ngang, dán dưới thanh đen để từ giữa
+   trang vẫn nhảy sang nhóm khác được; dòng mô tả bỏ đi vì tên nhóm đã đủ nghĩa. */
+@media(max-width:560px){
+  .settings-jump{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;position:sticky;top:56px;z-index:50;
+    margin:12px calc(-1 * var(--pad-x));padding:8px var(--pad-x);background:var(--surf);border-bottom:1px solid var(--bd)}
+  .settings-jump a{flex:0 0 auto;padding:10px 14px;border-radius:var(--pill);white-space:nowrap;min-height:44px;display:inline-flex;align-items:center}
+  .settings-jump small{display:none}
+  .content [id]{scroll-margin-top:124px}
+}
 /* Lưới chọn ảnh bìa: radio thuần HTML, không JS. Ảnh đang chọn có viền đậm nhờ
    :checked + selector anh em — cùng lối no-JS đã dùng ở gallery storefront. */
 .covgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;margin:6px 0 4px;max-height:280px;overflow-y:auto;padding:2px}
@@ -390,8 +399,33 @@ input[type=file]{width:auto;max-width:100%;padding:9px 12px;background:var(--sur
      hai con — <a>tên khách</a> + <div>SĐT</div> — bị xếp NGANG cạnh nhau rồi tràn ra ngoài
      thẻ. Đơn/Sản phẩm không lộ vì ô chính của chúng có sẵn một <div> bọc.
      Vị trí tuyệt đối không quan tâm ô có mấy con, nên đúng cho mọi bảng. */
-  table[data-cards] td{border:0;position:relative;padding:6px 0 6px 40%;text-align:right;min-height:20px;overflow-wrap:anywhere}
-  table[data-cards] td::before{content:attr(data-label);position:absolute;left:0;top:6px;width:38%;
+  table[data-cards] td{border:0;position:relative;padding:3px 0 3px 40%;text-align:right;min-height:20px;overflow-wrap:anywhere}
+  /* Ô phụ không có nội dung (chỉ còn dấu gạch) không đáng chiếm một dòng trên thẻ. */
+  table[data-cards] td.msec{display:none}
+  /* Thanh thao tác hàng loạt: bốn nút xếp dọc mỗi nút một hàng, đo ở 390px chiếm ~430px
+     chiều cao trước khi tới dòng đơn đầu tiên. Hai cột: nút ngang hàng, chữ giải thích xuống
+     cuối chiếm trọn bề ngang. */
+  /* Danh sách ĐƠN: 11 hàng nhãn-giá trị mỗi đơn (~560px, gần một màn hình) làm người bán
+     cuộn hàng chục màn hình cho 20 đơn. Thành 3 tầng: [chọn · mã đơn · TỔNG TIỀN] / khách /
+     giờ đặt / các nhãn trạng thái xếp ngang. Thứ tự cột là hợp đồng với renderOrders (11 ô);
+     đổi cột thì phải đổi số thứ tự ở đây. DOM không đổi nên Tab và trình đọc màn hình vẫn đi
+     đúng thứ tự cột như bản bảng. */
+  table[data-cards].ordtbl tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:12px 14px}
+  table[data-cards].ordtbl td{width:auto;padding:0;min-height:0;text-align:left;flex:0 0 auto}
+  table[data-cards].ordtbl td::before{display:none}
+  table[data-cards].ordtbl td:nth-child(1){order:0}
+  table[data-cards].ordtbl td:nth-child(2){order:1;flex:1 1 0;font-weight:700;font-size:1.05rem}
+  table[data-cards].ordtbl td:nth-child(11){order:2;font-size:1.05rem;white-space:nowrap}
+  table[data-cards].ordtbl td:nth-child(5){order:3;flex:1 1 100%}
+  table[data-cards].ordtbl td:nth-child(10){order:4;flex:1 1 100%;font-size:13px}
+  table[data-cards].ordtbl td:nth-child(3),table[data-cards].ordtbl td:nth-child(4),table[data-cards].ordtbl td:nth-child(9),
+  table[data-cards].ordtbl td:nth-child(7),table[data-cards].ordtbl td:nth-child(6),table[data-cards].ordtbl td:nth-child(8){order:5}
+  table[data-cards].ordtbl td.stack{flex:1 1 100%}
+  table[data-cards].ordtbl td.msec{display:none}
+  form#bulkf{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+  form#bulkf .btn{width:100%;min-width:0;justify-content:center;text-align:center;white-space:normal;line-height:1.25;padding-top:8px;padding-bottom:8px}
+  form#bulkf>span.muted{grid-column:1/-1}
+  table[data-cards] td::before{content:attr(data-label);position:absolute;left:0;top:3px;width:38%;
     color:var(--mut);font-size:13px;line-height:20px;font-weight:400;text-align:left;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* Ô rỗng (cột hành động trống, cột đệm) không đẻ ra dòng trắng vô nghĩa. */
@@ -530,7 +564,10 @@ a.metric:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:colo
    (-60 + 16 = -44), nên đo thật chỉ đè 44px chứ không phải 60px như spec. */
 .hero-lift{position:relative;z-index:3;margin-top:-60px}
 .hero-lift>.card{margin-top:0}
-@media(max-width:767px){.hero-band{min-height:0;padding-bottom:64px}.hero-lift{margin-top:-48px}}
+@media(max-width:767px){.hero-band{min-height:0;padding-bottom:64px}.hero-lift{margin-top:-48px}
+  /* Điện thoại hẹp: hình thoi trang trí đè lên tên shop và dòng "N việc đang chờ" (đo bằng
+     ảnh chụp 390px). Hạ độ đậm xuống còn nền mờ để chữ luôn đọc được. */
+  .hb-dot{opacity:.22}}
 .dash-hero{position:relative;overflow:hidden;background:linear-gradient(120deg,color-mix(in srgb,var(--brand) 7%,var(--card)),var(--card) 60%);border:1px solid var(--bd);border-radius:var(--r-lg);padding:26px 28px;margin:0 0 20px;box-shadow:var(--sh-sm)}
 .dash-hero::after{content:"";position:absolute;top:-40%;right:-8%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--brand2) 12%,transparent),transparent 70%);pointer-events:none}
 .dash-hero .eyebrow{position:relative;font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:var(--pri);font-weight:800;margin:0 0 4px}
@@ -552,7 +589,7 @@ a:focus-visible,.btn:focus-visible,.shop-card:focus-visible,.metric:focus-visibl
 .admtoggle{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
 /* ☰ là CỬA VÀO toàn bộ điều hướng trên điện thoại, mà đo được chỉ 22×24px. Ngón tay cần
    ~44px; trượt nút này là người bán không mở nổi menu và tưởng app không có gì khác. */
-.admburger{display:none;cursor:pointer;font-size:1.5rem;line-height:1;margin-right:10px;user-select:none;color:var(--ink);
+.admburger{display:none;cursor:pointer;font-size:1.5rem;line-height:1;margin-right:10px;user-select:none;color:#fff;
   min-width:44px;min-height:44px;align-items:center;justify-content:center;margin-left:-10px}
 .admtoggle:focus-visible+.side .side-brand{outline:2.5px solid var(--pri);outline-offset:2px}
 /* Mobile: gom sidebar (25 mục) vào nút ☰ trên topbar (no-JS checkbox). tbar lên trên, side hiện khi ☰. */
@@ -1547,7 +1584,7 @@ export function renderShopSettings(ctx, shopId, shop, notice, err, unused, draft
         </div>
         <p class="muted" style="font-size:.8rem;margin:8px 0 4px"><strong>Ngoài bán kính giao tối đa</strong> (vd khách ở tỉnh khác, cách hàng nghìn km):</p>
         <div class="actions" style="align-items:center;flex-wrap:wrap;gap:18px">
-          <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="ship_over_max_behavior" value="region"${overMax === 'region' ? ' checked' : ''} style="width:auto"> Vẫn giao toàn quốc — tính <strong>phí vùng liên miền</strong> ở trên (khuyến nghị)</label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="ship_over_max_behavior" value="region"${overMax === 'region' ? ' checked' : ''} style="width:auto"> <span>Vẫn giao toàn quốc — tính <strong>phí vùng liên miền</strong> ở trên (khuyến nghị)</span></label>
           <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="ship_over_max_behavior" value="reject"${overMax === 'reject' ? ' checked' : ''} style="width:auto"> Chỉ giao trong bán kính — từ chối đơn xa</label>
         </div>
         <p class="muted" style="font-size:.8rem;margin:6px 0 0">Phí km = <em>phí cơ bản + (số km × phí mỗi km × hệ số đường bộ)</em>, nhưng không thấp hơn phí vùng. Ví dụ cửa hàng Hà Nội, khách cách 5km: 15.000 + 5×4.000×1.3 ≈ 41.000đ. Khách ở TP.HCM (ngoài bán kính) → rơi về phí liên miền, <strong>không</strong> tính nghìn km. Bật ship theo km <strong>bắt buộc</strong> khai toạ độ + phí cơ bản + phí/km + bán kính, và ở phần trên phải có <strong>tỉnh gửi hàng</strong> + <strong>phí liên miền</strong> (làm mức dự phòng khi khách không bật định vị).</p>
@@ -3037,11 +3074,11 @@ export function renderOrders(ctx, shopId, data, filter) {
       { html: badge(o.status, STATUS[o.status] ?? o.status) },
       { html: `${badge(o.payment_status, PAY[o.payment_status] ?? o.payment_status)} <span class="muted">${esc(o.payment_method?.toUpperCase() ?? '')}</span>` },
       { html: `${esc(o.customer_name)}${susp ? ` <span class="badge cancelled" title="Cùng nguồn mạng với ${esc(o.same_ip_phones)} SĐT khác nhau đang chờ xử lý — kiểm tra kẻo đơn ảo">⚠ ${esc(o.same_ip_phones)} SĐT cùng nguồn</span>` : ''}` },
-      { html: o.source ? `<span class="badge">${esc(ORDER_SOURCE_LABEL[o.source] ?? o.source)}</span>`
+      { cls: o.source || o.is_migrated ? '' : 'msec', html: o.source ? `<span class="badge">${esc(ORDER_SOURCE_LABEL[o.source] ?? o.source)}</span>`
         : (o.is_migrated ? '<span class="muted">Nhập từ sàn cũ</span>' : '<span class="muted">—</span>') },
-      { cls: o.sync_error ? 'stack' : '', html: syncMeta },
-      { html: externalMeta || '<span class="muted">—</span>' },
-      { html: Array.isArray(o.attention) && o.attention.length
+      { cls: o.sync_error ? 'stack' : (!o.sync_status || o.sync_status === 'not_required') && !o.sync_updated_at ? 'msec' : '', html: syncMeta },
+      { cls: externalMeta ? '' : 'msec', html: externalMeta || '<span class="muted">—</span>' },
+      { cls: Array.isArray(o.attention) && o.attention.length ? '' : 'msec', html: Array.isArray(o.attention) && o.attention.length
         ? o.attention.map((kind) => `<span class="badge cancelled">${esc(kind === 'shipment' && o.shipment_attention_kind === 'orphan' ? 'Mất theo dõi vận đơn' : ORDER_ATTENTION_LABEL[kind] ?? kind)}</span>`).join(' ')
         : '<span class="muted">—</span>' },
       { cls: 'muted', html: dt(o.created_at) },
@@ -3164,6 +3201,7 @@ export function renderOrders(ctx, shopId, data, filter) {
         <span class="muted" style="font-size:.82rem">Tích ô ở đầu bảng để chọn cả trang (xác nhận: chỉ đơn "Chờ xử lý"; giao: chỉ đơn đã xác nhận, KHÔNG gồm đơn đang gửi qua hãng vận chuyển${ctx.role === 'owner' ? '; nhận tiền: chỉ đơn COD chưa thu' : ''}; đơn khác tự bỏ qua).</span>
       </form>
       ${tblCards({
+    cls: 'ordtbl',
     head: [
       { html: '<input type="checkbox" data-bulk-all="order_ids" form="bulkf" hidden aria-label="Chọn tất cả đơn trên trang">', label: '' },
       { html: 'Đơn' }, { html: 'Trạng thái' }, { html: 'Thanh toán' }, { html: 'Khách' },
