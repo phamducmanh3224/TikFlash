@@ -124,6 +124,14 @@ fi
 
 # ── 1. Dependency scan (npm audit, mức high+) ────────────────────────────────
 sect "1. Dependency scan (npm audit --audit-level=high)"
+# Kéo image TRƯỚC vòng lặp. `docker run … 2>&1` gom cả stderr vào `out`, nên trên máy chưa có
+# sẵn `node:22-alpine` thì tiến trình pull của gói ĐẦU TIÊN lẫn vào JSON audit → gói đó luôn
+# FLAG "KHÔNG CHẠY ĐƯỢC". Đo được 08/10/2026 trên runner GitHub mới: `apps/account` đỏ đúng
+# lý do này, mọi gói sau xanh vì image đã có. Pull hỏng thì KHÔNG dừng ở đây: `docker run`
+# bên dưới sẽ hỏng tiếp và từng gói vẫn FLAG — fail-closed giữ nguyên.
+if ! docker image inspect node:22-alpine >/dev/null 2>&1; then
+  docker pull -q node:22-alpine >/dev/null 2>&1
+fi
 for pkg in apps/*/package.json packages/*/package.json; do
   scan_dependency_package "$(dirname "$pkg")"
 done
