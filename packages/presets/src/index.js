@@ -80,20 +80,26 @@ export const PRESETS = {
     ],
   },
 
-  // ── Thực phẩm – Đồ uống — tươi, ấm, xanh lá + cam đất, nền kem, bo tròn ──
+  // ── Thực phẩm – Đồ uống — cam ấm gần gũi + đỏ cà chua cho ưu đãi, nền kem, bo tròn ──
+  // Chủ dự án chọn CAM cho hướng quán ăn (31/10/2026, docs/82). Cam "đẹp" nhất (#f97316) chỉ
+  // đạt 2,8:1 với chữ trắng, mà storefront in chữ TRẮNG trên primary ở thanh topbar, thanh
+  // menu dạng band (preset này dùng), huy hiệu giỏ và nút chính — chữ đó sẽ khó đọc ngoài
+  // nắng, đúng lúc khách đặt cơm trưa bằng điện thoại. Nên primary là cam đậm #c4470b (4,94:1)
+  // và accent #d32f2f (4,98:1): cả hai ≥ 4,5:1 — chuẩn chữ thường của docs/44. Chốt ở
+  // apps/checkout/test/do-an.test.js; đổi sang cam sáng hơn là chốt đó ĐỎ.
   food: {
     name: 'Thực phẩm – Đồ uống',
-    description: 'Siêu thị kiểu MM Mega Market: xanh dương thương hiệu + đỏ ưu đãi, thanh danh mục, lưới ưu đãi, và các hàng sản phẩm TỰ LƯỚT theo danh mục.',
+    description: 'Cam ấm gần gũi + đỏ ưu đãi, nền kem: thanh danh mục, lưới ưu đãi, và các hàng sản phẩm TỰ LƯỚT theo danh mục — hợp quán ăn, đồ uống, thực phẩm.',
     tokens: {
-      'color.primary': '#0272ba',
-      'color.primary-dark': '#005b96',
-      'color.accent': '#e82230',
+      'color.primary': '#c4470b',
+      'color.primary-dark': '#9a3412',
+      'color.accent': '#d32f2f',
       'color.bg': '#ffffff',
-      'color.surface': '#f3f4f6',
-      'color.hero-bg': '#f1f9ff',
-      'color.text': '#2a2f33',
-      'color.muted': '#7a7e80',
-      'color.border': '#e5e7eb',
+      'color.surface': '#fff7ed',
+      'color.hero-bg': '#ffedd5',
+      'color.text': '#2b1a10',
+      'color.muted': '#7a5c48',
+      'color.border': '#f3dfca',
       radius: '8px',
       spacing: '16px',
     },

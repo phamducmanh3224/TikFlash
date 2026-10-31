@@ -1912,6 +1912,10 @@ Telegram đơn mới có món + lời dặn** · **giờ nhận đơn + tạm ng
 `shop_order_window_open`, giờ VN cố định; checkout chặn thật, cửa hàng + trang thanh toán báo
 trước). Chi tiết, giới hạn và lỗi của chính lượt này: `docs/82`.
 
+Cùng nhánh: trang KHÁCH thấy đổi sang **cam ấm** theo yêu cầu chủ dự án — mẫu *Thực phẩm*,
+checkout, tài khoản khách. Cam đậm vì chữ trắng trên cam sáng chỉ 2,8:1; chốt tương phản ≥ 4,5:1
+ở `apps/checkout/test/do-an.test.js` đo theo đúng biến `.btn` dùng, cả chế độ tối (`docs/82` §4).
+
 Giới hạn đã nói với chủ dự án: chỉ chặn đơn website (đơn tay + bot Messenger không bị chặn) ·
 dải báo trên cửa hàng có thể trễ 1–6 phút vì cache CDN, cổng checkout thì tức thì · chưa có
 nút tạm nghỉ nhanh ở Tổng quan · một khung giờ cho mọi ngày.
@@ -1919,7 +1923,7 @@ nút tạm nghỉ nhanh ở Tổng quan · một khung giờ cho mọi ngày.
 Cổng đầy đủ 31/10 **chưa exit 0**: E2E 113/114 (bộ mới đỏ vì khẳng định ghim biểu tượng đã đổi —
 sửa xong chạy lại riêng 47/47) và `security-scan` đỏ vì advisory **high** mới của
 `decode-uri-component` ← `minio` — có sẵn trên `main`, cần việc riêng (xem `docs/82`).
-Đo: unit **350/350** · bất biến DB **152** · e2e mới `do-an.e2e.mjs` **47/47** · ma trận **19
+Đo: unit **353/353** · bất biến DB **152** · e2e mới `do-an.e2e.mjs` **47/47** · ma trận **19
 đột biến e2e/DB + 8 đột biến unit đều đỏ**, đối chứng mã sạch đầu/cuối 47/0. Bộ e2e mở stub
 Telegram ở `dbtest:9104` như `worker/test/e2e.mjs` — đừng chạy song song hai bộ.
 

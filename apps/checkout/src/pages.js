@@ -43,19 +43,28 @@ const FONTFACE = `@font-face{font-family:'Be Vietnam Pro';font-style:normal;font
 @font-face{font-family:'Be Vietnam Pro';font-style:normal;font-weight:800;font-display:swap;src:url(/fonts/bevietnampro-800-latin.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}`;
 const STYLE = `${FONTFACE}
 *{box-sizing:border-box}[hidden]{display:none!important}
+/* Bảng màu CAM ẤM cho trang khách (chủ dự án chọn 31/10/2026, docs/82). Ba quy ước:
+   (1) --btn1/--btn2 là nền NÚT CHÍNH (chữ trắng) và KHÔNG đổi theo chế độ tối: cả hai phải
+       đạt 4,5:1 với chữ trắng. Cam sáng kiểu #f97316 chỉ 2,8:1, nên nút là cam đậm.
+   (2) --brand/--pri2 là dải màu cho CHỮ (tên shop, h1): sáng lên ở chế độ tối, vì cam đậm
+       trên nền tối cũng khó đọc y như cam sáng trên nền trắng.
+   (3) --warn tách khỏi màu thương hiệu (nâu hổ phách): huy hiệu "chờ thanh toán" mà cùng
+       màu với nút thì khách không phân biệt được đâu là cảnh báo, đâu là trang trí.
+   Chốt tương phản: apps/checkout/test/do-an.test.js. */
 :root{
-  --bg:#ffffff;--surf:#f5f8fd;--card:#ffffff;--ink:#0d1526;--soft:#3f4d66;--mut:#59647a;--bd:#e6ebf3;
-  --pri:#2463eb;--prid:#1b48c0;--pri2:#7c3aed;--brand:#2463eb;--brand2:#7c3aed;--brandd:#1b48c0;--wash:#eef4ff;--good:#0e9f6e;
-  --warn:#c2410c;--warnbg:#fff7ed;--bad:#b91c1c;--badbg:#fef2f2;--goodbg:#ecfdf5;
+  --bg:#ffffff;--surf:#fff8f1;--card:#ffffff;--ink:#24160d;--soft:#4d3a2c;--mut:#6e5747;--bd:#f1e1d1;
+  --pri:#c2410c;--prid:#9a3412;--pri2:#b3360b;--brand:#c4470b;--brand2:#b3360b;--brandd:#9a3412;--wash:#fff1e6;--washbd:#fdba74;--good:#0e9f6e;
+  --btn1:#c4470b;--btn2:#b3360b;
+  --warn:#92400e;--warnbg:#fffbeb;--bad:#b91c1c;--badbg:#fef2f2;--goodbg:#ecfdf5;
   --r-sm:9px;--r:13px;--r-lg:18px;--r-xl:24px;--pill:999px;
-  --sh-sm:0 1px 2px rgba(13,21,38,.06),0 1px 3px rgba(13,21,38,.05);
-  --sh:0 6px 20px -8px rgba(13,21,38,.14);
-  --sh-lg:0 24px 50px -24px rgba(13,21,38,.30);
+  --sh-sm:0 1px 2px rgba(36,22,13,.06),0 1px 3px rgba(36,22,13,.05);
+  --sh:0 6px 20px -8px rgba(36,22,13,.14);
+  --sh-lg:0 24px 50px -24px rgba(36,22,13,.30);
   --sh-pri:0 14px 34px -14px color-mix(in srgb,var(--pri) 60%,transparent)}
 @media(prefers-color-scheme:dark){:root{
-  --bg:#0a0e1a;--surf:#131b2e;--card:#1b2440;--ink:#eef1f9;--soft:#c2cadd;--mut:#8a94ab;--bd:#28324c;
-  --pri:#5b8cff;--prid:#7ba0ff;--pri2:#a78bfa;--wash:#161f38;--good:#34d399;
-  --warn:#fb923c;--warnbg:#2a1c0f;--bad:#f87171;--badbg:#2a1414;--goodbg:#0f2a1e;
+  --bg:#140e0a;--surf:#1a120c;--card:#241911;--ink:#f6eee8;--soft:#dccbbd;--mut:#b8a394;--bd:#3a2a1f;
+  --pri:#fb923c;--prid:#fdba74;--pri2:#fb923c;--brand:#fdba74;--brand2:#fb923c;--brandd:#fdba74;--wash:#2a1a10;--washbd:#9a3412;--good:#34d399;
+  --warn:#fcd34d;--warnbg:#2a1c0f;--bad:#f87171;--badbg:#2a1414;--goodbg:#0f2a1e;
   --sh-sm:0 1px 2px rgba(0,0,0,.4);--sh:0 8px 24px -8px rgba(0,0,0,.5);--sh-lg:0 30px 60px -24px rgba(0,0,0,.65)}}
 body{margin:0;font-family:'Be Vietnam Pro',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--surf);line-height:1.6;-webkit-font-smoothing:antialiased;background-image:radial-gradient(120% 55% at 50% -8%,color-mix(in srgb,var(--pri) 9%,transparent),transparent 62%);background-attachment:fixed}
 a{color:var(--pri);text-decoration:none}a:hover{text-decoration:underline}
@@ -79,7 +88,7 @@ h2{font-size:1rem;margin:0 0 .7em;font-weight:700;letter-spacing:-.01em;color:va
 .row:last-child{border-bottom:0}.muted{color:var(--mut);font-size:.9rem}.right{text-align:right}
 .it{display:flex;gap:12px}.cthumb{width:56px;height:56px;object-fit:cover;border-radius:var(--r);border:1px solid var(--bd);flex:0 0 auto;background:var(--surf)}.cthumb.ph{border-style:dashed}
 .tot{display:flex;justify-content:space-between;padding:7px 0;font-variant-numeric:tabular-nums}.tot .muted{font-size:.95rem}.tot.grand{font-weight:800;font-size:1.14rem;letter-spacing:-.01em;border-top:1px solid var(--bd);margin-top:8px;padding-top:12px}
-.btn{display:block;width:100%;text-align:center;background:linear-gradient(135deg,var(--brand),var(--pri2));background-size:150% 150%;color:#fff;border:1.5px solid transparent;border-radius:var(--pill);padding:15px;font-size:1rem;font-weight:600;letter-spacing:-.01em;text-decoration:none;cursor:pointer;box-shadow:var(--sh-pri);transition:transform .1s,background-position .3s,box-shadow .15s}
+.btn{display:block;width:100%;text-align:center;background:linear-gradient(135deg,var(--btn1),var(--btn2));background-size:150% 150%;color:#fff;border:1.5px solid transparent;border-radius:var(--pill);padding:15px;font-size:1rem;font-weight:600;letter-spacing:-.01em;text-decoration:none;cursor:pointer;box-shadow:var(--sh-pri);transition:transform .1s,background-position .3s,box-shadow .15s}
 .btn:hover{background-position:100% 0;text-decoration:none;transform:translateY(-2px);box-shadow:0 18px 40px -14px color-mix(in srgb,var(--pri) 65%,transparent)}.btn:active{transform:translateY(1px)}
 .btn.alt{background:var(--card);color:var(--ink);border:1.5px solid color-mix(in srgb,var(--pri) 26%,var(--bd));box-shadow:var(--sh-sm)}
 .btn.alt:hover{background:var(--card);border-color:var(--pri);color:var(--pri);opacity:1;transform:translateY(-2px)}
@@ -279,7 +288,7 @@ export function renderCheckout(shopName, s, idemToken, opts = {}) {
   const honeypot = `<input class="hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">`;
   // Email NỔI BẬT (nudge, vẫn không bắt buộc): khách COD hay bỏ trống → không nhận thông báo nào.
   // Ô nổi bật + nêu rõ lợi ích để khách chịu điền → tự động nhận email xác nhận + đổi-trạng-thái + mã tra cứu.
-  const emailField = `<div style="margin:12px 0;padding:11px 13px;border:1px dashed #2563eb;border-radius:10px;background:#f5f8ff">
+  const emailField = `<div style="margin:12px 0;padding:11px 13px;border:1px dashed var(--washbd);border-radius:10px;background:var(--wash)">
       <label style="font-weight:600;margin:0">📧 Email nhận thông báo đơn <span style="color:#6b7280;font-weight:400">(nên nhập)</span></label>
       <input name="email" type="email" autocomplete="email" value="${v(pf.email)}" placeholder="ban@email.com" style="margin-top:5px">
       <div style="color:#6b7280;font-size:.82rem;margin-top:4px">Nhận email xác nhận đơn, cập nhật khi giao hàng, và mã tra cứu đơn.</div>
@@ -465,7 +474,7 @@ export function renderOrder(shopName, o, pay, qr, justPlaced = false, lookupToke
   }[o.status] ?? o.status;
   const badgeCls = o.status === 'delivered' ? 'ok' : daDong ? 'cancelled' : 'wait';
   const syncBlock = o.sync_status === 'pending'
-    ? `<div class="card" style="border-color:#93c5fd;background:#eff6ff"><strong>Đã tiếp nhận, đang chờ KiotViet xác nhận.</strong><p class="muted" style="margin:6px 0 0">Đơn đã có trong hệ thống của cửa hàng. Bạn không cần đặt lại; trạng thái sẽ tự cập nhật khi kết nối hoàn tất.</p></div>`
+    ? `<div class="card" style="border-color:var(--washbd);background:var(--wash)"><strong>Đã tiếp nhận, đang chờ KiotViet xác nhận.</strong><p class="muted" style="margin:6px 0 0">Đơn đã có trong hệ thống của cửa hàng. Bạn không cần đặt lại; trạng thái sẽ tự cập nhật khi kết nối hoàn tất.</p></div>`
     : o.sync_status === 'needs_attention'
     ? `<div class="card" style="border-color:#fcd34d;background:var(--warnbg,#fffbeb)"><strong>Cửa hàng đang kiểm tra lại đơn với hệ thống bán tại quầy.</strong><p class="muted" style="margin:6px 0 0">Đơn vẫn được lưu; cửa hàng sẽ liên hệ nếu cần thêm thông tin.</p></div>`
     : '';
@@ -536,7 +545,7 @@ export function renderOrder(shopName, o, pay, qr, justPlaced = false, lookupToke
       <div class="tot grand"><span>Tổng cộng</span><span>${money(o.total_vnd)}</span></div>
       ${fulfillmentAdjustment > 0 ? `<div class="tot"><span class="muted">Trừ phần không giao</span><span>−${money(fulfillmentAdjustment)}</span></div><div class="tot grand"><span>Giá trị sau xử lý</span><span>${money(Math.max(0, Number(o.total_vnd) - fulfillmentAdjustment))}</span></div>` : ''}
       <p class="muted" style="margin-top:8px">Giao tới: ${esc(o.customer_name)}</p></div>
-    ${lookupToken ? `<div class="card" style="border-color:#93c5fd;background:#eff6ff">
+    ${lookupToken ? `<div class="card" style="border-color:var(--washbd);background:var(--wash)">
       <h2 style="margin-top:0">📌 Mã tra cứu đơn — hãy lưu lại</h2>
       <p class="muted" style="margin:0 0 10px">Dùng <strong>số đơn + mã</strong> dưới đây để tra cứu đơn bất cứ lúc nào, kể cả khi bạn không có tài khoản.</p>
       <div class="row"><span class="muted">Số đơn</span><span><strong>#${o.order_number}</strong></span></div>

@@ -57,6 +57,30 @@ khác", luôn dưới 4096 ký tự của Telegram kể cả ca tệ nhất. Pay
   trong đường ghi-đè-toàn-bộ `PATCH /shops/:id` — form cũ đó không có các ô này. Trang Cài đặt
   nói trạng thái HIỆN TẠI bằng chính hàm checkout dùng để chặn.
 
+### 4. Màu cam cho trang khách thấy (thêm sau, cùng ngày)
+
+Chủ dự án muốn "màu cam gần gũi khách". Em đọc là **những trang KHÁCH MUA nhìn thấy**: mẫu
+giao diện *Thực phẩm – Đồ uống* của cửa hàng, trang giỏ hàng / thanh toán / tra cứu đơn
+(`checkout`, dùng chung cho mọi shop), và trang tài khoản khách (`account`). Trang quản trị
+của người bán, trang đăng ký và trang chủ nền tảng **giữ nguyên** — đó là trang của chủ shop,
+không phải của khách.
+
+Phần dễ làm sai: **cam đẹp nhất lại là cam không đọc được.** `#f97316` chỉ đạt 2,8:1 với chữ
+trắng, mà nút đặt hàng, thanh topbar, menu dạng band, huy hiệu giỏ đều in chữ TRẮNG lên màu
+chính. Nên nút dùng cam đậm (`#c4470b`, 4,94:1) và mọi cặp chữ/nền đều ≥ 4,5:1 — chuẩn chữ
+thường của `docs/44`. Ở chế độ tối, CHỮ màu thương hiệu sáng lên (`#fdba74`) nhưng NỀN nút giữ
+cam đậm: hai thứ trước đây dùng chung biến `--brand`, nên ở checkout tách ra `--btn1/--btn2`.
+Huy hiệu "chờ thanh toán" (`--warn`) đổi sang nâu hổ phách, vì trùng màu nút thì khách không
+còn phân biệt được đâu là cảnh báo.
+
+Chốt đo HẬU QUẢ (tỉ lệ tương phản), không ghim mã màu: đổi sang cam khác vẫn xanh, miễn chữ
+còn đọc được. Phép đo đi theo ĐÚNG biến mà quy tắc `.btn` dùng, ở cả hai chế độ.
+
+Giới hạn: shop đã tạo trước đó giữ màu cũ đã lưu trong `themes` — muốn cam thì bấm "Áp mẫu"
+lại (giữ nguyên banner). Hero của cửa hàng là cam pha tối (động cơ giao diện pha màu chính với
+đen để chữ trắng đọc được) nên trông hơi nâu khi shop chưa tải ảnh banner. Mẫu *Mỹ phẩm*
+(`#f36b7d`, 2,9:1 với chữ trắng) có cùng lỗi tương phản từ trước — ngoài phạm vi, chưa sửa.
+
 ## Giới hạn đã biết — nói thẳng
 
 - **Chỉ chặn đơn khách tự đặt trên website.** Đơn tạo tay và đơn từ bot Messenger không bị
@@ -117,6 +141,14 @@ khác", luôn dưới 4096 ký tự của Telegram kể cả ca tệ nhất. Pay
      lại bộ, nên khẳng định ghim nguyên văn `⏸ Đang tạm nghỉ` đỏ. Nay khẳng định đọc câu chữ
      thay vì biểu tượng; chạy lại riêng bộ đó: **47/47**. Đúng luật §5 "chỉ test → chạy đúng bộ
      đó"; cổng đầy đủ chưa chạy lại.
+
+**Màu cam (mục 4):** 3 ca unit mới trong `do-an.test.js` (unit toàn bộ **353/353**). Ma trận
+**9/9 đột biến đỏ** (11/1 mỗi ca): cam sáng cho primary · accent sáng · chữ phụ nhạt (mẫu) ·
+nút checkout cam sáng · `.btn` quay lại dùng `--brand` (sáng lên ở chế độ tối) · chế độ tối đè
+nền nút · chữ phụ checkout nhạt · huy hiệu chờ nhạt · nút tài khoản cam sáng; đối chứng 12/0.
+Hồi quy e2e sau khi đổi: do-an 47 · checkout 29 · buyer-flow 35 · account 71 · admin-preset 10
+· storefront 165 · verify-provision 15 · address-picker 14 — tất cả 0 fail. Ảnh 390px sáng +
+tối: không tràn ngang, đã mở ra xem.
 
 ## Lỗi của chính lượt này
 

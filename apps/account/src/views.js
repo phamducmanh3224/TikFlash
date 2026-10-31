@@ -2,7 +2,9 @@
 import { esc } from './http.js';
 
 const STYLE = `
-:root{--bg:#f7f7f8;--card:#fff;--bd:#e5e7eb;--pri:#2563eb;--ink:#111827;--mut:#6b7280;--bad:#b91c1c;--good:#059669}
+/* Cam ấm, cùng bảng màu với trang thanh toán (docs/82): khách đi từ giỏ hàng sang tài khoản
+   không thấy đổi sang một thương hiệu khác. --pri #c2410c đạt 5,18:1 với chữ trắng của nút. */
+:root{--bg:#fff8f1;--card:#fff;--bd:#f1e1d1;--pri:#c2410c;--ink:#24160d;--mut:#6e5747;--bad:#b91c1c;--good:#059669}
 *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
 a{color:var(--pri)}.wrap{max-width:960px;margin:0 auto;padding:20px 16px}
 .auth{max-width:420px;margin:40px auto;padding:0 16px}
@@ -17,7 +19,7 @@ input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--bd);bor
 .ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:10px 12px;margin:12px 0}
 .muted{color:var(--mut)}.row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--bd);font-size:.92rem}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.78rem;background:#eef2ff;color:#3730a3}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.78rem;background:#fff1e6;color:#9a3412}
 .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .foot{margin-top:24px;font-size:.82rem;color:var(--mut);text-align:center}
 `;

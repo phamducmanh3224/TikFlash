@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseCustomerNote, outboxItems, closedMessage } from '../src/do-an.js';
 import { tgDonMoi } from '../../worker/src/tg-don-moi.js';
+import { PRESETS } from '../../../packages/presets/src/index.js';
 
 const ROOT = join(import.meta.dirname, '..', '..', '..');
 const doc = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -110,4 +111,67 @@ test('dọn outbox gỡ customer_note cùng các khoá PII khác', () => {
   assert.match(m[1], /- 'customer_note'/);
   assert.match(src, /jsonb_exists\(payload, 'customer_note'\)/,
     'điều kiện WHERE cũng phải nhặt dòng CHỈ còn customer_note — không thì dòng đó không bao giờ được dọn');
+});
+
+// ── Màu cam cho trang khách (31/10/2026) ──────────────────────────────────────────────────
+// Chủ dự án chọn cam "gần gũi". Cam sáng đẹp nhất lại là cam KHÔNG ĐỌC ĐƯỢC: #f97316 chỉ đạt
+// 2,8:1 với chữ trắng, trong khi nút đặt hàng, thanh topbar, menu dạng band và huy hiệu giỏ
+// đều in chữ TRẮNG lên màu chính. Chốt đo HẬU QUẢ (tỉ lệ tương phản WCAG) chứ không ghim mã
+// màu: đổi sang cam khác vẫn xanh, miễn chữ còn đọc được. Ngưỡng 4,5:1 = chữ thường (docs/44).
+
+const kenh = (h) => {
+  const x = h.replace('#', '');
+  const full = x.length === 3 ? [...x].map((c) => c + c).join('') : x.slice(0, 6);
+  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+};
+const doSang = (h) => { const [r, g, b] = kenh(h); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const tuongPhan = (a, b) => { const [x, y] = [doSang(a), doSang(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const datChuan = (fg, bg, ten, nguong = 4.5) => {
+  const t = tuongPhan(fg, bg);
+  assert.ok(t >= nguong, `${ten}: ${fg} trên ${bg} chỉ đạt ${t.toFixed(2)}:1 — cần ≥ ${nguong}:1`);
+};
+// Rút biến CSS từ MỘT khối :root{...} (không lồng ngoặc bên trong).
+const bienCss = (khoi) => Object.fromEntries([...khoi.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{3,8})\b/g)].map((m) => [m[1], m[2]]));
+const khoiRoot = (src, truoc) => {
+  const i = src.indexOf(truoc);
+  assert.ok(i >= 0, `không thấy "${truoc}" — đổi hình CSS thì sửa test, đừng xoá`);
+  const j = src.indexOf(':root{', i);
+  return src.slice(j, src.indexOf('}', j) + 1);
+};
+
+test('mẫu Thực phẩm: chữ trắng trên màu chính + nhấn đọc được; chữ thường đọc được trên nền', () => {
+  const t = PRESETS.food.tokens;
+  datChuan('#ffffff', t['color.primary'], 'chữ trắng trên color.primary (nút, topbar, menu band, huy hiệu giỏ)');
+  datChuan('#ffffff', t['color.accent'], 'chữ trắng trên color.accent (nhãn giảm giá)');
+  datChuan(t['color.primary'], t['color.bg'], 'link/giá màu primary trên nền trang');
+  for (const nen of ['color.bg', 'color.surface', 'color.hero-bg']) {
+    datChuan(t['color.text'], t[nen], `color.text trên ${nen}`);
+    datChuan(t['color.muted'], t[nen], `color.muted trên ${nen}`);
+  }
+});
+
+test('trang thanh toán: nút chính đọc được ở CẢ chế độ sáng lẫn tối; link + chữ phụ đọc được', () => {
+  const src = doc('apps/checkout/src/pages.js');
+  const sang = bienCss(khoiRoot(src, 'const STYLE'));
+  const toi = { ...sang, ...bienCss(khoiRoot(src, '@media(prefers-color-scheme:dark){')) };
+  // Đọc ĐÚNG biến mà quy tắc .btn dùng — đổi .btn sang biến khác (vd --brand, vốn sáng lên ở
+  // chế độ tối) thì phép đo đi theo, không đứng nhìn một biến không ai dùng.
+  const btn = /\n\.btn\{[^}]*background:linear-gradient\(135deg,var\(--([a-z0-9-]+)\),var\(--([a-z0-9-]+)\)\)[^}]*color:#fff/.exec(src);
+  assert.ok(btn, 'không thấy quy tắc .btn nền gradient + chữ trắng');
+  for (const [che, bien] of [['sáng', sang], ['tối', toi]]) {
+    for (const v of [btn[1], btn[2]]) datChuan('#ffffff', bien[v], `chế độ ${che}: chữ trắng trên nút (--${v})`);
+    for (const nen of ['bg', 'surf', 'card']) {
+      datChuan(bien.pri, bien[nen], `chế độ ${che}: link --pri trên --${nen}`);
+      datChuan(bien.mut, bien[nen], `chế độ ${che}: chữ phụ --mut trên --${nen}`);
+    }
+    datChuan(bien.warn, bien.warnbg, `chế độ ${che}: huy hiệu chờ thanh toán`);
+  }
+});
+
+test('tài khoản khách: nút chữ trắng trên --pri đọc được', () => {
+  const v = bienCss(khoiRoot(doc('apps/account/src/views.js'), 'const STYLE'));
+  datChuan('#ffffff', v.pri, 'chữ trắng trên nút --pri');
+  datChuan(v.pri, v.bg, 'link --pri trên nền');
+  datChuan(v.mut, v.bg, 'chữ phụ --mut trên nền');
 });
