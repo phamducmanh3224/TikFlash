@@ -20,8 +20,26 @@ sect() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 # npm đã đổi văn phong output nhiều lần; chỉ metadata JSON mới là hợp đồng máy đọc được.
 # Mode classify dùng đúng hàm production để unit test được cả high và fail-closed mà không
 # cần mạng. Mode audit-package là probe hẹp cho một package thật khi review dependency scan.
+# Ngoại lệ advisory: MỘT mã GHSA, MỘT ngày hết hạn, MỘT lý do đã kiểm. Khoá theo mã advisory,
+# KHÔNG theo tên gói: một lỗ hổng high mới trên cùng gói (hay ở gói khác kéo cùng chuỗi) vẫn đỏ.
+# Hết hạn thì tự đỏ lại — ngoại lệ không gia hạn ngầm, phải có người xem lại rồi sửa dòng này.
+#
+# GHSA-qr28-fpjm-wq7f (decode-uri-component <=0.5.0, high từ 23/10/2026), kéo vào qua
+#   minio 8.0.7 → query-string ^7.1.3 → decode-uri-component ^0.2.2, ở checkout/seller/worker.
+#   Chưa vá được: bản vá duy nhất 0.5.1 chỉ có ESM, query-string 7 `require()` nó nên ép
+#   overrides thì `qs.parse` ném "decodeComponent is not a function" (đã thử 31/10); ép
+#   query-string 8+ thì minio `import * as qs` gọi `qs.stringify` ra undefined (đã thử).
+#   Không chạm tới được: minio 8.0.7 (cả dist/esm lẫn dist/main) chỉ gọi `stringify`, còn
+#   decode-uri-component chỉ được gọi trong `parse`/`parseUrl` của query-string; mã của kho không
+#   import query-string hay decode-uri-component. Kết luận từ đọc mã, chưa thử tấn công.
+#   Xem lại khi minio ra bản đổi query-string, hoặc tới hạn.
+AUDIT_WAIVERS="GHSA-qr28-fpjm-wq7f@2026-11-30"
+
+# npm đã đổi văn phong output nhiều lần; chỉ metadata JSON mới là hợp đồng máy đọc được.
+# Mode classify dùng đúng hàm production để unit test được cả high và fail-closed mà không
+# cần mạng. Mode audit-package là probe hẹp cho một package thật khi review dependency scan.
 audit_json_summary() {
-  node -e '
+  WAIVERS="$1" NOW_MS="$2" node -e '
 let input = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => { input += chunk; });
@@ -31,10 +49,38 @@ process.stdin.on("end", () => {
     const counts = report?.metadata?.vulnerabilities;
     const keys = ["low", "moderate", "high", "critical"];
     if (!counts || keys.some((key) => !Number.isInteger(counts[key]) || counts[key] < 0)) throw new Error("bad counts");
-    const severe = Object.entries(report.vulnerabilities ?? {})
+    const entries = Object.entries(report.vulnerabilities ?? {});
+    const severe = entries
       .filter(([, item]) => item?.severity === "high" || item?.severity === "critical")
       .map(([name, item]) => `${name}:${item.severity}`);
-    process.stdout.write([counts.low, counts.moderate, counts.high, counts.critical, severe.join(",") || "-"].join("\t"));
+    // Advisory gốc (object trong `via`) mức high+; `via` dạng chuỗi chỉ là mức thừa hưởng từ
+    // gói khác, nên khi MỌI advisory gốc high+ đều được miễn thì mọi mức thừa hưởng cũng vậy.
+    const now = Number(process.env.NOW_MS);
+    const waivers = new Map();
+    for (const w of (process.env.WAIVERS || "").split(/\s+/).filter(Boolean)) {
+      const [id, day] = w.split("@");
+      const until = Date.parse(`${day}T23:59:59+07:00`);
+      if (!/^GHSA(-[0-9a-z]{4}){3}$/.test(id) || !Number.isFinite(until)) throw new Error("bad waiver");
+      waivers.set(id, { day, live: now <= until });
+    }
+    const roots = new Set();
+    for (const [, item] of entries) for (const via of item?.via ?? []) {
+      if (via && typeof via === "object" && (via.severity === "high" || via.severity === "critical")) {
+        roots.add(/GHSA(-[0-9a-z]{4}){3}/.exec(String(via.url))?.[0] ?? `?${via.name ?? "không-tên"}`);
+      }
+    }
+    const open = [], waived = [], expired = [];
+    for (const id of [...roots].sort()) {
+      const w = waivers.get(id);
+      if (!w) open.push(id);
+      else if (w.live) waived.push(`${id}@${w.day}`);
+      else expired.push(`${id}@${w.day}`);
+    }
+    // high+ được đếm mà không rút ra được advisory gốc nào = hình dạng lạ → không được miễn.
+    if (counts.high + counts.critical > 0 && roots.size === 0) open.push("không-rút-được-advisory");
+    const list = (xs) => xs.join(",") || "-";
+    process.stdout.write([counts.low, counts.moderate, counts.high, counts.critical, list(severe),
+      list(open), list(waived), list(expired)].join("\t"));
   } catch {
     process.exitCode = 2;
   }
@@ -42,18 +88,28 @@ process.stdin.on("end", () => {
 }
 
 classify_dependency_audit() {
-  local dir="$1" audit_rc="$2" out="$3" summary parse_rc low moderate high critical severe
-  summary="$(printf '%s' "$out" | audit_json_summary 2>/dev/null)"
+  local dir="$1" audit_rc="$2" out="$3" waivers="${4-$AUDIT_WAIVERS}" now_ms="${5:-}"
+  local summary parse_rc low moderate high critical severe open waived expired
+  [ -n "$now_ms" ] || now_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+  summary="$(printf '%s' "$out" | audit_json_summary "$waivers" "$now_ms" 2>/dev/null)"
   parse_rc=$?
   if [ "$parse_rc" -ne 0 ] || [ -z "$summary" ]; then
     flag "$dir — dependency scan KHÔNG CHẠY ĐƯỢC; không được coi output rỗng/lỗi Docker/JSON hỏng là sạch"
     printf '%s\n' "$out" | head -4 | sed 's/^/       /'
     return
   fi
-  IFS=$'\t' read -r low moderate high critical severe <<<"$summary"
+  IFS=$'\t' read -r low moderate high critical severe open waived expired <<<"$summary"
   if [ "$high" -gt 0 ] || [ "$critical" -gt 0 ]; then
+    if [ "$open" = "-" ] && [ "$expired" = "-" ] && [ "$audit_rc" -le 1 ]; then
+      # `npm audit --audit-level=high` trả 1 chính vì các high này; mã khác 0/1 vẫn là lỗi chạy.
+      warn "$dir — $high high, $critical critical, TẤT CẢ thuộc ngoại lệ có hạn: $waived"
+      return
+    fi
     flag "$dir — CÓ lỗ hổng high/critical: $high high, $critical critical"
     printf '%s\n' "$severe" | tr ',' '\n' | sed 's/^/       /'
+    [ "$open" = "-" ] || printf '       chưa miễn: %s\n' "$open"
+    [ "$expired" = "-" ] || printf '       ngoại lệ HẾT HẠN, xem lại rồi sửa AUDIT_WAIVERS: %s\n' "$expired"
+    [ "$audit_rc" -le 1 ] || printf '       npm audit trả mã %s — KHÔNG CHẠY ĐƯỢC trọn, không miễn được\n' "$audit_rc"
   elif [ "$audit_rc" -ne 0 ]; then
     flag "$dir — dependency scan KHÔNG CHẠY ĐƯỢC; JSON hợp lệ nhưng npm audit trả mã $audit_rc"
   else
@@ -98,7 +154,10 @@ scan_dependency_package() {
 
 case "${1:-}" in
   --classify-audit-json)
-    classify_dependency_audit "${2:-fixture}" "${3:-0}" "$(cat)"
+    # Chỉ mode kiểm thử này nhận ngoại lệ/giờ giả qua env; lượt quét thật luôn đọc hằng số
+    # AUDIT_WAIVERS và đồng hồ thật, nên không ai miễn được advisory bằng cách đặt biến môi trường.
+    classify_dependency_audit "${2:-fixture}" "${3:-0}" "$(cat)" \
+      "${AUDIT_WAIVERS_TEST-$AUDIT_WAIVERS}" "${AUDIT_NOW_MS_TEST:-}"
     [ "$issues" -eq 0 ] || exit 1
     exit 0
     ;;
