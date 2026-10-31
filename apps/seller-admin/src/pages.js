@@ -666,11 +666,13 @@ const BTYPE = { heading: 'Tiêu đề', paragraph: 'Đoạn văn', list: 'Danh s
 // 4 cam kết mặc định của dải features storefront (#40) — GIỮ ĐỒNG BỘ với
 // DEFAULT_FEATURES ở apps/storefront/src/theme.js (đây là placeholder/fallback khi
 // shop để trống; icon cố định theo ô). themeSave (server.js) dùng làm fallback per-ô.
+// Chỉ nói điều NỀN TẢNG bảo đảm cho mọi shop (lý do + nguồn từng câu: chú thích ở theme.js);
+// chốt apps/storefront/test/ban-le.test.js so BẰNG hai bảng.
 export const THEME_FEATURE_DEFAULTS = [
-  { icon: 'truck', title: 'Giao hàng toàn quốc', desc: 'Nhận hàng tận nơi, nhanh chóng khắp 63 tỉnh thành.' },
-  { icon: 'return', title: 'Đổi trả trong 7 ngày', desc: 'Chưa ưng ý? Đổi hoặc trả dễ dàng, không rắc rối.' },
-  { icon: 'badge', title: 'Cam kết chính hãng', desc: 'Sản phẩm đúng mô tả, chất lượng đảm bảo.' },
-  { icon: 'wallet', title: 'Thanh toán an toàn', desc: 'COD khi nhận hàng hoặc chuyển khoản QR tiện lợi.' },
+  { icon: 'wallet', title: 'Trả tiền khi nhận hàng', desc: 'Nhận hàng rồi mới thanh toán (COD).' },
+  { icon: 'truck', title: 'Biết phí giao trước khi đặt', desc: 'Phí giao hàng hiện rõ ở bước thanh toán.' },
+  { icon: 'shield', title: 'Không cần tạo tài khoản', desc: 'Đặt hàng chỉ cần tên, số điện thoại và địa chỉ.' },
+  { icon: 'badge', title: 'Tra cứu đơn bằng mã', desc: 'Nhận mã tra cứu ngay khi đặt để xem tình trạng đơn.' },
 ];
 
 // Kênh bán & mạng xã hội hiện ở chân trang. PHẢI khớp CHANNEL_KINDS ở apps/seller
@@ -1255,7 +1257,7 @@ export function renderTheme(ctx, theme, notice, linkTargets = {}) {
         </div>
       </div>
       <div class="card"><h2 style="margin-top:0">Thanh thông báo (trên cùng mọi trang)</h2>
-        <label>Nội dung</label><input name="topbar_text" maxlength="120" value="${esc(topbar.topbar_text ?? '')}" placeholder="Giao hàng toàn quốc · Thanh toán COD hoặc chuyển khoản QR">
+        <label>Nội dung</label><input name="topbar_text" maxlength="120" value="${esc(topbar.topbar_text ?? '')}" placeholder="Ví dụ: Freeship đơn từ 300.000₫ — để trống thì không hiện thanh này">
         <p class="muted" style="font-size:.85rem;margin-bottom:0">Để trống = dùng câu mặc định. Chỉ hứa điều shop làm được (phí ship, đổi trả…).</p>
       </div>
       ${navMenuCard}

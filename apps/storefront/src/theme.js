@@ -170,12 +170,31 @@ function cardMeta(p) {
   return `<div class="card-meta">${rate}${sd}</div>`;
 }
 
+// Nhãn "Bán chạy" trên ảnh thẻ: chỉ khi sold_count (0096 — tổng số lượng TRỌN ĐỜI của đơn
+// ĐÃ TRẢ TIỀN, không huỷ/trả, worker tính lại định kỳ) đạt ngưỡng TUYỆT ĐỐI này. Không xếp
+// hạng tương đối ("top 3 của shop"): shop mới mở bán được 2 cái thì món "nhiều nhất" vẫn chưa
+// phải bán chạy, và nhãn đó sẽ là lời quảng cáo không có thật. 50 là mức khách đọc được là
+// "nhiều người đã mua"; dưới mức đó thẻ vẫn hiện "Đã bán N" thật ở dòng dưới giá.
+const BAN_CHAY_TOI_THIEU = 50;
+// Giá trên THẺ: giá bán + giá gạch, KHÔNG kèm ô "-N%" (ô đó lên góc ảnh, xem productCards).
+// Thẻ điện thoại rộng ~145px: giá + gạch + ô % trên một dòng là xuống dòng, thẻ cao thấp lệch
+// nhau trong cùng một hàng. Logic chọn giá Y HỆT priceLine (sale đè compare_at) — chỉ khác chỗ đặt %.
+const cardPrice = (p) => (p.sale_price_vnd != null
+  ? `<strong>${money(p.sale_price_vnd)}</strong> <s class="cmp">${money(p.price_vnd)}</s>`
+  : `${money(p.price_vnd)}${p.compare_at_vnd != null && Number(p.compare_at_vnd) > Number(p.price_vnd) ? ` <s class="cmp">${money(p.compare_at_vnd)}</s>` : ''}`);
+const cardOffPct = (p) => (p.sale_price_vnd != null
+  ? (Number(p.sale_off_pct) > 0 ? Number(p.sale_off_pct) : null)
+  : (p.compare_at_vnd != null && Number(p.compare_at_vnd) > Number(p.price_vnd) ? offPct(p.price_vnd, p.compare_at_vnd) : null));
+
 // Thẻ sản phẩm dùng chung (lưới trang chủ / danh mục / tìm kiếm). Escape mọi field người bán.
 // Phase 3 — HTML HỢP LỆ (KHÔNG nhét phần tử tương tác vào trong <a>):
-//   .card (div) ▸ .card-thumb ▸ [ <a.card-media> ảnh1 + ảnh2 + tag hết-hàng ] + [ .card-actions
+//   .card (div) ▸ .card-thumb ▸ [ <a.card-media> ảnh1 + ảnh2 + nhãn ] + [ .card-actions
 //   (👁 quick-view + Thêm vào giỏ) — là ANH EM của <a>, không lồng ] ; .card-body ▸ tên(link)+giá.
 //   No-JS: card-media/tên/👁 → /p/:slug ; thêm-giỏ SP-phẳng = <form> PRG /cart ; SP-nhiều-biến-thể
 //   = <a> về /p/:slug. Có JS: 👁/thêm-nhiều-biến-thể mở quick-view; thêm SP-phẳng mở drawer.
+// Nhãn góc ảnh (kiểu sàn): "Hết hàng" đứng một mình; còn hàng thì "-N%" (giảm thật so với giá
+// gạch / giá sale) và "Bán chạy" (sold_count thật ≥ BAN_CHAY_TOI_THIEU). Không có dữ liệu thì
+// không có nhãn — không nhãn nào được dựng từ chữ mẫu.
 function productCards(products) {
   return products.map((p) => {
     const out = Number(p.available) <= 0;
@@ -183,7 +202,12 @@ function productCards(products) {
     // Thêm-nhanh CHỈ khi SP phẳng (server đặt default_variant_id) và còn hàng; ngược lại → link PDP.
     const quickAdd = !p.has_options && p.default_variant_id && !out;
     const img2 = p.image2 ? `<img class="card-img2" src="${esc(p.image2)}" alt="" loading="lazy" aria-hidden="true">` : '';
-    const media = `<a class="card-media" href="${href}" aria-label="${esc(p.title)}">${out ? '<span class="soldout-tag">Hết hàng</span>' : ''}${p.image ? `<img class="card-img1" src="${esc(p.image)}" alt="${esc(p.title)}" loading="lazy">` : `<span class="ph">${I_IMG}</span>`}${img2}</a>`;
+    const off = out ? null : cardOffPct(p);
+    const hot = !out && Number(p.sold_count) >= BAN_CHAY_TOI_THIEU;
+    const tags = out
+      ? '<span class="soldout-tag">Hết hàng</span>'
+      : (off || hot) ? `<span class="c-tags">${off ? `<span class="c-tag c-off">-${esc(off)}%</span>` : ''}${hot ? '<span class="c-tag c-hot">Bán chạy</span>' : ''}</span>` : '';
+    const media = `<a class="card-media" href="${href}" aria-label="${esc(p.title)}">${tags}${p.image ? `<img class="card-img1" src="${esc(p.image)}" alt="${esc(p.title)}" loading="lazy">` : `<span class="ph">${I_IMG}</span>`}${img2}</a>`;
     // Kiểu MẪU: "Xem nhanh" NỔI GIỮA ảnh khi hover; "Thêm vào giỏ" xuống THÂN thẻ, LUÔN hiện.
     const qv = out ? '' : `<div class="card-qvwrap"><a class="card-qv" href="${href}" aria-label="Xem nhanh ${esc(p.title)}">Xem nhanh</a></div>`;
     const addBtn = out
@@ -193,7 +217,7 @@ function productCards(products) {
         : `<a class="card-add" href="${href}">${I_CART}<span>Thêm vào giỏ</span></a>`;
     return `<div class="card${out ? ' is-out' : ''}">
           <div class="card-thumb">${media}${qv}</div>
-          <div class="card-body"><a class="name" href="${href}">${esc(p.title)}</a><div class="price">${priceLine(p.price_vnd, p.sale_price_vnd, p.sale_off_pct, p.compare_at_vnd)}</div>${cardMeta(p)}${addBtn}</div>
+          <div class="card-body"><a class="name" href="${href}">${esc(p.title)}</a><div class="price">${cardPrice(p)}</div>${cardMeta(p)}${addBtn}</div>
         </div>`;
   }).join('');
 }
@@ -252,15 +276,38 @@ function filterBar(pi, query, extraHidden = '') {
   </form>`;
 }
 
-// Dải "vì sao chọn chúng tôi" — mặc định 4 cam kết. Shop có thể override qua props.items
-// (nhưng text luôn escape khi render). icon chọn từ FEAT_ICON, giá trị lạ → khiên mặc định.
+// Dải cam kết ngắn dưới hero — mặc định 4 câu. Shop sửa ở trang Giao diện (props.items; text
+// luôn escape khi render). icon chọn từ FEAT_ICON, giá trị lạ → khiên mặc định.
+//
+// Câu MẶC ĐỊNH chỉ được nói điều NỀN TẢNG bảo đảm cho MỌI shop — nó hiện thay mặt shop chưa
+// kịp sửa, nên một lời hứa sai ở đây là lời hứa sai của hàng nghìn shop cùng lúc. Bản cũ hứa
+// "Giao hàng toàn quốc" (shop giao theo bán kính km thì không), "Đổi trả trong 7 ngày", "Cam
+// kết chính hãng" — đều là chính sách RIÊNG của từng shop. Bốn câu dưới đây đúng ở mọi shop:
+//   - COD luôn nhận: checkout không có cờ nào tắt COD (chỉ QR là tuỳ chọn).
+//   - Phí giao hiện ở bước thanh toán, trước nút Đặt hàng.
+//   - Khách không cần tài khoản: bắt buộc chỉ họ tên, SĐT, địa chỉ, tỉnh (checkout/pages.js).
+//   - Mỗi đơn có số đơn + mã tra cứu ở trang xác nhận (/checkout/lookup).
+// GIỮ ĐỒNG BỘ với THEME_FEATURE_DEFAULTS ở apps/seller-admin/src/pages.js (chốt: storefront
+// test ban-le.test.js so BẰNG hai bảng).
 const FEAT_ICON = { truck: I_TRUCK, return: I_RETURN, badge: I_BADGE, wallet: I_WALLET, shield: I_SHIELD };
-const DEFAULT_FEATURES = [
-  { icon: 'truck', title: 'Giao hàng toàn quốc', desc: 'Nhận hàng tận nơi, nhanh chóng khắp 63 tỉnh thành.' },
-  { icon: 'return', title: 'Đổi trả trong 7 ngày', desc: 'Chưa ưng ý? Đổi hoặc trả dễ dàng, không rắc rối.' },
-  { icon: 'badge', title: 'Cam kết chính hãng', desc: 'Sản phẩm đúng mô tả, chất lượng đảm bảo.' },
-  { icon: 'wallet', title: 'Thanh toán an toàn', desc: 'COD khi nhận hàng hoặc chuyển khoản QR tiện lợi.' },
+export const DEFAULT_FEATURES = [
+  { icon: 'wallet', title: 'Trả tiền khi nhận hàng', desc: 'Nhận hàng rồi mới thanh toán (COD).' },
+  { icon: 'truck', title: 'Biết phí giao trước khi đặt', desc: 'Phí giao hàng hiện rõ ở bước thanh toán.' },
+  { icon: 'shield', title: 'Không cần tạo tài khoản', desc: 'Đặt hàng chỉ cần tên, số điện thoại và địa chỉ.' },
+  { icon: 'badge', title: 'Tra cứu đơn bằng mã', desc: 'Nhận mã tra cứu ngay khi đặt để xem tình trạng đơn.' },
 ];
+// Cam kết của SHOP NÀY: items đã lưu ở trang Giao diện, không có thì bộ mặc định. Dùng chung
+// cho dải dưới hero, hàng cam kết ở trang sản phẩm và dải chân trang — ba chỗ trước đây in
+// cứng "Giao hàng toàn quốc · Thanh toán COD hoặc QR" bất kể shop đã sửa cam kết thành gì,
+// nên trang chủ nói một đằng còn trang sản phẩm nói một nẻo.
+function shopFeatures(ctx, props = null) {
+  const own = (props && Array.isArray(props.items) && props.items.length) ? props.items
+    : (Array.isArray(ctx?.theme?.layout) ? ctx.theme.layout.find((x) => x && x.section === 'features')?.props?.items : null);
+  return (Array.isArray(own) && own.length ? own : DEFAULT_FEATURES)
+    .filter((f) => f && typeof f.title === 'string' && f.title.trim()).slice(0, 4);
+}
+const trustSpans = (ctx, n) => shopFeatures(ctx).slice(0, n)
+  .map((f) => `<span>${FEAT_ICON[f.icon] || I_SHIELD}${esc(f.title)}</span>`).join('');
 
 // Carousel BANNER tuỳ chỉnh (Phase 5): tái dùng khung .hero/.hero-track/.hslide/.hero-dots
 // + animation thuần CSS + chấm như hero tự động. Mỗi slide: ảnh phủ kín (.hbanner-img) +
@@ -377,8 +424,10 @@ function floatButtons(raw) {
 
 // ── section renderers (nhận dữ liệu ĐÃ đọc, escape khi render) ────────────────
 const SECTIONS = {
-  // Thanh thông báo (props.topbar_text, sửa ở trang Giao diện; trống → câu mặc định an toàn
-  // cho mọi shop) + header dính. Trang con (SP/blog/CMS) gọi header với props RỖNG →
+  // Thanh thông báo (props.topbar_text, sửa ở trang Giao diện) + header dính. Shop CHƯA viết
+  // gì → KHÔNG có thanh. Câu mặc định cũ "Giao hàng toàn quốc · …chuyển khoản QR" hứa hai thứ
+  // nhiều shop không có (giao theo bán kính km; chưa bật QR), và trên điện thoại nó ăn 40px
+  // ngay trên màn đầu. Thanh này dành cho tin THẬT của shop (freeship từ…, nghỉ lễ…). Trang con (SP/blog/CMS) gọi header với props RỖNG →
   // tự tra props đã lưu trong ctx.theme.layout để topbar hiện NHẤT QUÁN trên mọi trang.
   header: (props, ctx) => {
     const saved = (Array.isArray(ctx.theme?.layout)
@@ -387,7 +436,7 @@ const SECTIONS = {
       ? props.topbar_text
       : (typeof saved.topbar_text === 'string' && saved.topbar_text)
         ? saved.topbar_text
-        : 'Giao hàng toàn quốc · Thanh toán COD hoặc chuyển khoản QR';
+        : '';
     // Dropdown "Sản phẩm" (thuần CSS, :hover + :focus-within): shortcut cố định + danh mục THẬT.
     // Shortcut trỏ về lưới trang chủ theo sort có sẵn (GRID_SORTS) — KHÔNG route mới, không 404.
     // (Khuyến mãi = giá tăng dần tạm thời — Phase 2 có thể thêm trang /sale riêng.)
@@ -490,7 +539,7 @@ const SECTIONS = {
         ? `Cửa hàng đang tạm nghỉ, chưa nhận đơn mới.${sh.orders_pause_note ? ` ${esc(sh.orders_pause_note)}` : ''}`
         : `Ngoài giờ nhận đơn — cửa hàng nhận đơn từ ${esc(sh.order_open_time ?? '')} đến ${esc(sh.order_close_time ?? '')} mỗi ngày.`}</div>`
       : '';
-    const topbar = `<div class="topbar">${esc(topbarText)}</div>${closedBar}`;
+    const topbar = `${topbarText ? `<div class="topbar">${esc(topbarText)}</div>` : ''}${closedBar}`;
     if (band) {
       // 2 tầng: hàng tiện ích (brand + tìm + tài khoản + giỏ) TRÊN nền trắng, dải NAV NỀN HỒNG
       // full-bleed DƯỚI. navtoggle đặt ở CẤP header (không trong .wrap) để mobile
@@ -537,13 +586,16 @@ const SECTIONS = {
           <span class="hero-card"><span class="hc-name">${esc(p.title)}</span><span class="hc-price">${p.sale_price_vnd != null ? `${money(p.sale_price_vnd)} <span class="off">-${esc(p.sale_off_pct)}%</span>` : money(p.price_vnd)}</span></span>
         </a>`
       : `<div class="hero-media deco" aria-hidden="true">${I_SHIELD}</div>`);
-    const ghost = (Array.isArray(ctx.categories) && ctx.categories.length)
+    // Nút phụ "Bộ sưu tập" trỏ #bo-suu-tap — chỉ có đích khi trang chủ THẬT SỰ dựng khối
+    // collections. Bố cục có category_rows (mọi mẫu ngành) không dựng nó ⇒ nút bấm không đi
+    // đâu cả. ctx.homeSections do renderHome đặt; trang khác không render hero.
+    const ghost = (Array.isArray(ctx.categories) && ctx.categories.length && ctx.homeSections?.has('collections'))
       ? '<a class="btn btn-hero-ghost" href="#bo-suu-tap">Bộ sưu tập</a>' : '';
     const slides = [`<div class="hslide"><div class="hero-grid">
       <div class="hero-copy">
         <p class="eyebrow">${esc(props.eyebrow || 'Cửa hàng chính thức')}</p>
         <h1>${esc(props.title || ctx.shop.name)}</h1>
-        <p class="hero-sub">${esc(props.subtitle || 'Mua sắm dễ dàng — giao hàng toàn quốc, thanh toán COD hoặc chuyển khoản QR.')}</p>
+        <p class="hero-sub">${esc(props.subtitle || 'Chọn sản phẩm ưng ý, đặt hàng trong vài bước và trả tiền khi nhận hàng.')}</p>
         <div class="hero-cta"><a class="btn btn-hero" href="#san-pham">Xem sản phẩm</a>${ghost}</div>
       </div>
       ${visual(withImg[0])}
@@ -566,11 +618,11 @@ const SECTIONS = {
     });
     const n = slides.length;
     const dots = n > 1 ? `<div class="hero-dots" aria-hidden="true">${'<span class="dot"></span>'.repeat(n)}</div>` : '';
-    return `<section class="hero hero-n${n}"><div class="hero-track">${slides.join('')}</div>${dots}</section>`;
+    return `<section class="hero hero-auto hero-n${n}"><div class="hero-track">${slides.join('')}</div>${dots}</section>`;
   },
 
   features: (props, ctx) => {
-    const items = (Array.isArray(props.items) && props.items.length ? props.items : DEFAULT_FEATURES).slice(0, 4);
+    const items = shopFeatures(ctx, props);
     return `<section class="features"><div class="wrap">
       <div class="feat-grid">${items.map((f) => `<div class="feat-item">
         <span class="feat-ic">${FEAT_ICON[f.icon] || I_SHIELD}</span>
@@ -844,7 +896,7 @@ const SECTIONS = {
     return `<footer class="ftr">
       <div class="ftr-hd"><div class="wrap">
         <div class="ftr-mark">${ctx.shop.logo_url ? `<img src="${esc(ctx.shop.logo_url)}" alt="${esc(ctx.shop.name)}">` : ''}<span>${esc(ctx.shop.name)}</span></div>
-        <div class="badges"><span>${I_TRUCK}Giao hàng toàn quốc</span><span>${I_SHIELD}Thanh toán COD hoặc QR</span></div>
+        <div class="badges">${trustSpans(ctx, 2)}</div>
       </div></div>
       <div class="wrap ftr-body">
         <div class="ftr-grid">
@@ -1117,6 +1169,10 @@ a:focus-visible,.btn:focus-visible,summary:focus-visible,button:focus-visible,.t
 .hero-arrow:hover{background:rgba(10,8,6,.55);border-color:#fff}
 .hero.js-run .hero-arrow{display:inline-flex}
 .hero-arrow.prev{left:14px}.hero-arrow.next{right:14px}
+/* Hero toàn bề rộng (tự động + banner): mũi tên xuống HÀNG CHẤM ở đáy dải. Giữa cạnh trái thì
+   vòng 44px (14–58px) đè lên chữ hero (bắt đầu ở 47px với màn 1366) — đo được chữ "Thiết kế…"
+   bị che mất chữ T. Hero split giữ nguyên: mũi tên nằm trong ô lớn, không có chữ sát mép. */
+.hero:not(.hero-split) .hero-arrow{top:auto;bottom:6px;transform:none}
 @media(max-width:720px){.hero-arrow{width:36px;height:36px;font-size:1.3rem}.hero-arrow.prev{left:8px}.hero-arrow.next{right:8px}}
 @keyframes hcycle2{0%{opacity:0;visibility:hidden;transform:translateY(10px)}3%{opacity:1;visibility:visible;transform:none}47%{opacity:1;visibility:visible;transform:none}50%,100%{opacity:0;visibility:hidden}}
 @keyframes hcycle3{0%{opacity:0;visibility:hidden;transform:translateY(10px)}2.5%{opacity:1;visibility:visible;transform:none}30.8%{opacity:1;visibility:visible;transform:none}33.4%,100%{opacity:0;visibility:hidden}}
@@ -1190,12 +1246,38 @@ a:focus-visible,.btn:focus-visible,summary:focus-visible,button:focus-visible,.t
 @keyframes hdot2{0%,50%,100%{background:rgba(255,255,255,.35);width:8px}3%,47%{background:#fff;width:22px}}
 @keyframes hdot3{0%,33.4%,100%{background:rgba(255,255,255,.35);width:8px}2.5%,30.8%{background:#fff;width:22px}}
 @media(max-width:820px){.hero-grid{grid-template-columns:1fr;gap:26px;padding:38px 20px 42px;text-align:center}.hero-sub{max-width:none}.hero-cta{justify-content:center}.hero-media{max-width:440px;width:100%;margin:0 auto}}
+/* HERO TỰ ĐỘNG (shop chưa tải banner) — gọn lại để SẢN PHẨM lên màn đầu.
+   Đo 31/10 ở 390×844, cả 5 mẫu: hero cao ~1000px (chữ + ảnh SP 4:3 + 2 nút), thẻ SP đầu tiên
+   ở y≈1150 — khách mở cửa hàng chỉ thấy một khung quảng cáo. Điện thoại bỏ ẢNH trong hero
+   (chính SP đó nằm ngay dưới trong lưới), mô tả kẹp 2 dòng. Máy tính: ảnh 16:10, đệm mỏng hơn. */
+.hero-auto .hero-grid{padding:40px 24px 44px}
+.hero-auto .hero-media{aspect-ratio:16/9;max-height:330px}
+@media(max-width:720px){
+  .hero-auto .hero-media{display:none}
+  .hero-auto .hero-grid{padding:22px 20px 16px;gap:0}
+  .hero-auto .eyebrow{margin:0 0 10px;font-size:.66rem;padding:5px 11px}
+  .hero-auto h1,.hero-auto .hero-h{font-size:1.6rem;margin:0 0 8px}
+  .hero-auto .hero-sub{font-size:.92rem;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .hero-auto .hero-cta{margin-top:14px}
+  .hero-auto .btn{min-height:44px;padding:10px 22px;font-size:.92rem}
+  .hero-auto .hero-dots{padding-bottom:12px}
+  /* Mũi tên ẩn trên điện thoại: chấm (vùng bấm 28×44) + tự chuyển đã đủ, mà hai vòng 36px ở
+     hai mép đè lên nút "Xem sản phẩm" khi dải hero thấp lại. */
+  .hero.hero-auto.js-run .hero-arrow{display:none}
+}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font-body);font-size:1rem;font-weight:600;min-height:48px;padding:12px 26px;border-radius:var(--btn-radius,var(--pill));border:1px solid transparent;cursor:pointer;transition:transform .12s cubic-bezier(.2,.7,.2,1),background-position .35s,box-shadow .2s,border-color .15s,color .15s,background .15s;line-height:1}
 .btn:active{transform:translateY(1px)}.btn svg{width:18px;height:18px}
 .btn-primary{background:linear-gradient(135deg,var(--color-primary),color-mix(in srgb,var(--color-primary) 55%,var(--color-accent)));background-size:150% 150%;color:#fff;box-shadow:0 10px 26px -12px color-mix(in srgb,var(--color-primary) 66%,transparent)}
 .btn-primary:hover{background-position:100% 0;transform:translateY(-1px);box-shadow:0 16px 32px -14px color-mix(in srgb,var(--color-primary) 72%,transparent)}
 .btn-ghost{background:var(--color-bg);color:var(--color-text);border-color:color-mix(in srgb,var(--color-primary) 30%,var(--color-border))}.btn-ghost:hover{border-color:var(--color-primary);color:var(--color-primary);background:color-mix(in srgb,var(--color-primary) 6%,var(--color-bg))}
-.section{padding:clamp(48px,6vw,72px) 0}.section-h{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin:0 0 26px}.section-h h2{margin:0;font-size:clamp(1.4rem,2.4vw,1.85rem);font-weight:800;letter-spacing:-.02em}
+.section{padding:clamp(48px,6vw,72px) 0}
+/* <main class="wrap section">: .section (khai SAU .wrap, cùng độ ưu tiên) đè mất lề ngang 24px
+   của .wrap ⇒ tiêu đề "Tất cả sản phẩm", ô lọc và lưới dính sát mép màn hình điện thoại.
+   Hai lớp gộp (0,2,0) trả lại lề ngang mà không đụng lề dọc của .section. */
+.wrap.section{padding-left:24px;padding-right:24px}
+/* Điện thoại: đệm dọc mỗi mục 48px → 32px. 48px trên + 48px dưới giữa HAI mục liền nhau là
+   96px trắng — gần một hàng thẻ sản phẩm — lặp lại 5–6 lần trên trang chủ. */
+@media(max-width:720px){.section{padding-top:32px;padding-bottom:32px}}.section-h{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin:0 0 26px}.section-h h2{margin:0;font-size:clamp(1.4rem,2.4vw,1.85rem);font-weight:800;letter-spacing:-.02em}
 /* Đầu-mục section (Phase 3): eyebrow nhỏ + tiêu đề bên trái, link "Xem tất cả →" bên phải. */
 .section-eyebrow{margin:0 0 6px;color:var(--color-accent);font-weight:700;font-size:.74rem;letter-spacing:.14em;text-transform:uppercase}
 .section-all{flex:0 0 auto;align-self:center;font-size:.86rem;font-weight:700;color:var(--color-primary);white-space:nowrap;transition:color .15s,transform .15s}
@@ -1214,11 +1296,6 @@ a:focus-visible,.btn:focus-visible,summary:focus-visible,button:focus-visible,.t
 .pf-title-row .products-title{margin:0}
 .pf-layout{display:grid;grid-template-columns:272px minmax(0,1fr);gap:32px;align-items:start}
 .pf-side{border:1px solid var(--color-border);border-radius:var(--r-lg);background:var(--color-bg);box-shadow:var(--sh-sm);overflow:hidden;position:sticky;top:88px}
-.pf-toggle{display:none;align-items:center;gap:10px;padding:16px 20px;font-family:var(--font-heading);font-weight:800;font-size:1.02rem;letter-spacing:-.01em;color:var(--color-text);cursor:pointer;list-style:none}
-.pf-toggle::-webkit-details-marker{display:none}
-.pf-toggle svg{width:19px;height:19px;color:var(--color-primary)}
-.pf-toggle .pf-caret{margin-left:auto;transition:transform .2s;color:var(--color-muted)}
-.pf-side[open] .pf-toggle .pf-caret{transform:rotate(180deg)}
 .pf-body{display:flex;flex-direction:column;gap:22px;padding:20px}
 .pf-group{display:flex;flex-direction:column;gap:10px}
 .pf-h{margin:0;font-size:.74rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--color-muted)}
@@ -1266,12 +1343,43 @@ a:focus-visible,.btn:focus-visible,summary:focus-visible,button:focus-visible,.t
 .pf-main .pf-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 /* Tablet hẹp: lưới cột phải về 2 cột (sidebar vẫn còn) */
 @media(max-width:1100px){.pf-layout{grid-template-columns:232px minmax(0,1fr);gap:24px}.pf-main .pf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-/* <=860: sidebar GẬP thành <details> nằm TRÊN lưới (summary "Bộ lọc"), lưới full-width 2 cột */
+/* Thanh riêng của ĐIỆN THOẠI (ô tìm + hàng danh mục + nút "Lọc" gập) — máy tính không thấy. */
+.pf-mbar,.pf-mfilter{display:none}
+/* <=860 (điện thoại, máy tính bảng dọc): BỎ sidebar, sản phẩm lên màn đầu như sàn TMĐT.
+   Thứ tự nhìn = thứ tự DOM (không dùng CSS order): tiêu đề → ô tìm → danh mục → "N sản phẩm"
+   + Lọc → sắp xếp → lưới. Hàng danh mục và hàng sắp xếp LƯỚT NGANG thay vì xuống dòng:
+   xuống dòng thì 5 danh mục + 4 kiểu sắp xếp ăn ~200px trước khi tới sản phẩm đầu tiên. */
 @media(max-width:860px){
-  .pf-layout{grid-template-columns:1fr;gap:20px}
-  .pf-side{position:static;margin:0 0 4px}
-  .pf-toggle{display:flex}
-  .pf-side:not([open]) .pf-body{display:none}
+  .wrap.section.pf-page{padding-top:16px}
+  .pf-title-row{margin:0 0 12px}
+  .pf-page .products-title{font-size:1.45rem}
+  /* minmax(0,1fr) chứ không 1fr: hàng sắp xếp nowrap rộng ~440px, cột 1fr (= minmax(auto,1fr))
+     sẽ giãn theo nó và kéo CẢ TRANG tràn ngang (sổ tay §4, ô lưới min-width:auto). */
+  .pf-layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .pf-main{min-width:0}
+  .pf-side{display:none}
+  .pf-mbar{display:flex;flex-direction:column;gap:10px;margin:0 0 14px}
+  .pf-msearch{padding:3px 3px 3px 14px}
+  .pf-msearch input{font-size:16px;padding:7px 0} /* 16px: iOS không tự phóng to khi chạm ô */
+  .pf-chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -24px;padding:2px 24px;scroll-padding-inline:24px}
+  .pf-chips::-webkit-scrollbar{display:none}
+  .pf-chip{flex:0 0 auto;display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border:1px solid var(--color-border);border-radius:var(--btn-radius,var(--pill));background:var(--color-bg);color:var(--color-text);font-size:.88rem;font-weight:600;white-space:nowrap}
+  .pf-chip.on{border-color:var(--color-primary);background:var(--color-primary);color:#fff}
+  .pf-chips-sub .pf-chip{min-height:36px;font-size:.84rem;font-weight:500;color:var(--color-muted)}
+  .pf-chips-sub .pf-chip.on{background:var(--color-hero-bg);color:color-mix(in srgb,var(--color-primary) 82%,#000);font-weight:700}
+  .pf-head{position:relative;margin:0 0 14px;padding-bottom:0;border-bottom:0;gap:10px}
+  .pf-mfilter{display:block}
+  .pf-mtoggle{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 14px;border:1px solid var(--color-border);border-radius:var(--btn-radius,var(--pill));font-weight:700;font-size:.88rem;color:var(--color-text);cursor:pointer;list-style:none;background:var(--color-bg)}
+  .pf-mtoggle::-webkit-details-marker{display:none}
+  .pf-mtoggle svg{width:17px;height:17px;color:var(--color-primary)}
+  .pf-mfilter[open] .pf-mtoggle{border-color:var(--color-primary)}
+  /* Bảng lọc NỔI dưới hàng đếm (không đẩy lưới xuống): mở ra là thấy đủ, đóng lại bằng chính
+     nút "Lọc". Không JS vẫn chạy — <details> tự gập/mở. */
+  .pf-mpanel{position:absolute;left:0;right:0;top:calc(100% - 4px);z-index:20;padding:18px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--r-lg);box-shadow:var(--sh-lg)}
+  .pf-head .sortbar{flex-basis:100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -24px;padding:0 24px}
+  .pf-head .sortbar::-webkit-scrollbar{display:none}
+  .pf-head .sort-lbl{display:none}
+  .pf-head .sort-link{flex:0 0 auto;white-space:nowrap;padding:8px 14px}
   .pf-main .pf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 /* Nút "Xem thêm" TO, căn giữa dưới lưới nổi bật trang chủ → /products. */
@@ -1339,6 +1447,11 @@ a:focus-visible,.btn:focus-visible,summary:focus-visible,button:focus-visible,.t
 .spot-buy-out{background:var(--color-surface);color:var(--color-muted);box-shadow:none;cursor:not-allowed;pointer-events:none;border-color:var(--color-border)}
 @media(max-width:820px){.spot-grid{grid-template-columns:1fr;gap:28px}.spotlight-rev .spot-media{order:0}.spot-media{max-width:460px;width:100%;margin:0 auto}.spot-copy{align-items:center;text-align:center}.spot-blurb{max-width:none}.spot-cta{justify-content:center}}
 /* ═══ Bố cục tạp hoá/MM: thanh danh mục nhanh (category_bar) + hàng SP theo danh mục cuộn ngang (category_rows) ═══ */
+/* Thanh danh mục là một HÀNG ICON, không phải một mục nội dung: đệm 48–72px trên dưới như
+   .section làm nó chiếm ~250px, đẩy lưới sản phẩm ra khỏi màn đầu (đo 390×844: khoảng trắng
+   ~170px giữa dải cam kết và "Hàng mới về"). */
+.section.catbar{padding:22px 0 6px}
+@media(max-width:720px){.section.catbar{padding:14px 0 0}}
 .catbar-row{display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;padding:6px 2px 14px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
 .catbar-item{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:10px;width:100px;padding:4px;color:var(--color-text);text-align:center;transition:transform .12s;scroll-snap-align:start}
 .catbar-item:hover{text-decoration:none;transform:translateY(-3px)}
@@ -1387,14 +1500,26 @@ a:focus-visible,.btn:focus-visible,summary:focus-visible,button:focus-visible,.t
 .promo-cap{position:absolute;left:0;right:0;bottom:0;padding:10px 14px;background:linear-gradient(0deg,rgba(0,0,0,.5),transparent);color:#fff;font-weight:700;font-size:.9rem}
 @media(max-width:640px){.promo-grid{grid-template-columns:1fr}}
 .empty{color:var(--color-muted);padding:28px 0;text-align:center}
+/* Dải cam kết NGẮN (kiểu hàng "Freeship · Đổi size · Kiểm hàng" của sàn): đứng ngay dưới hero
+   nên phải mỏng — trước đây 36px đệm + icon 46px làm dải cao ~130px. Điện thoại chỉ giữ TIÊU
+   ĐỀ, lưới 2×2: bốn câu đều đọc được mà không phải lướt, cao ~90px. */
 .features{background:var(--color-surface);border-top:1px solid var(--color-border);border-bottom:1px solid var(--color-border)}
-.features .wrap{padding:36px 20px}
-.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:26px}
-.feat-item{display:flex;align-items:flex-start;gap:14px}
-.feat-ic{flex:0 0 auto;width:46px;height:46px;border-radius:var(--pill);background:var(--color-bg);color:var(--color-primary);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--color-border)}
-.feat-ic svg{width:23px;height:23px}
-.feat-t{font-weight:700;font-size:.98rem;color:var(--color-text);margin-bottom:3px}
-.feat-d{font-size:.85rem;color:var(--color-muted);line-height:1.5}
+.features .wrap{padding:20px 24px}
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px 26px}
+.feat-item{display:flex;align-items:center;gap:12px}
+.feat-ic{flex:0 0 auto;width:38px;height:38px;border-radius:var(--pill);background:var(--color-bg);color:var(--color-primary);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--color-border)}
+.feat-ic svg{width:19px;height:19px}
+.feat-t{font-weight:700;font-size:.92rem;color:var(--color-text);margin-bottom:2px}
+.feat-d{font-size:.82rem;color:var(--color-muted);line-height:1.45}
+@media(max-width:720px){
+  .features .wrap{padding:12px 16px}
+  .feat-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+  .feat-item{gap:8px;min-width:0}
+  .feat-ic{width:auto;height:auto;background:none;box-shadow:none}
+  .feat-ic svg{width:17px;height:17px}
+  .feat-t{font-size:.8rem;font-weight:600;line-height:1.3;margin:0;overflow-wrap:anywhere}
+  .feat-d{display:none}
+}
 /* Bộ sưu tập (Phase 3): tile lớn hơn (min 200px, cao 168px), gradient thương hiệu + mũi tên
    trượt khi rê. Bố cục 3 cột trên desktop nên khối không còn "trơ trọi" như trước. */
 .coll-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:18px}
@@ -1491,7 +1616,7 @@ a.sort-link:hover{border-color:var(--color-primary);color:var(--color-primary);b
 .card-body{padding:16px 18px 20px;display:flex;flex-direction:column;gap:7px;flex:1}
 .card .name{font-family:var(--font-heading);font-weight:600;font-size:.98rem;color:var(--color-text);line-height:1.38;letter-spacing:-.01em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.72em;transition:color .15s}
 .card .name:hover{color:var(--color-primary)}
-.card .price{font-weight:800;color:var(--color-primary);font-size:1.12rem;letter-spacing:-.01em;font-variant-numeric:tabular-nums;margin-top:auto}
+.card .price{font-weight:800;color:var(--color-primary);font-size:1.12rem;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
 /* Tín hiệu sàn TMĐT (0096): sao + "Đã bán N" dưới giá, kiểu Shopee/TikTok Shop.
    Một dòng, chữ nhỏ, màu phụ — KHÔNG được tranh chú ý với giá. Tự xuống dòng khi thẻ hẹp. */
 .card-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:.76rem;color:var(--color-muted);line-height:1.3;min-height:1.2em}
@@ -1530,6 +1655,28 @@ a.sort-link:hover{border-color:var(--color-primary);color:var(--color-primary);b
 .soldout-note{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:var(--r);padding:14px 16px;font-weight:600;margin:0 0 22px}
 .card .soldout-tag{position:absolute;top:10px;left:10px;z-index:1;background:rgba(17,24,39,.82);color:#fff;font-size:.76rem;font-weight:600;padding:4px 10px;border-radius:var(--pill);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
 .card.is-out .card-media img{opacity:.55;filter:grayscale(.3)}
+/* Nhãn góc ảnh (-N% · Bán chạy). Màu CỐ ĐỊNH, không theo token của shop: nhãn giảm giá phải
+   đọc được trên mọi ảnh và mọi bảng màu — accent của mẫu Đa ngành là teal, chữ trắng trên đó
+   chỉ ~4:1. Đỏ #c62828 với chữ trắng 5,6:1; vàng #ffc233 với chữ nâu #3d2600 ~10:1. */
+.c-tags{position:absolute;top:8px;left:8px;z-index:1;display:flex;flex-direction:column;align-items:flex-start;gap:5px;pointer-events:none}
+.c-tag{display:inline-block;font-size:.72rem;font-weight:800;line-height:1;padding:5px 8px;border-radius:6px;letter-spacing:.01em;font-variant-numeric:tabular-nums}
+.c-off{background:#c62828;color:#fff}
+.c-hot{background:#ffc233;color:#3d2600}
+/* "Thêm vào giỏ" MỘT dòng ở mọi bề rộng: gãy hai dòng làm nút cao gấp đôi và các thẻ trong
+   cùng hàng lệch nhau (đo ở 390px: nút 129px, chữ+icon cần 116px + lề 28px). */
+.card-add{white-space:nowrap}
+/* Giá bám NGAY dưới tên (tên luôn giữ chỗ 2 dòng), chỉ nút thêm giỏ dạt đáy thẻ. Trước đây giá
+   cũng margin-top:auto nên thẻ có giá gạch (2 dòng) và thẻ không có đứng LỆCH nhau ~16px trong
+   cùng một hàng — mắt so giá theo hàng ngang. */
+@media(max-width:560px){
+  .card-body{padding:10px 10px 12px;gap:6px}
+  .card .name{font-size:.9rem}
+  .card .price{font-size:1.02rem}
+  .card-add{min-height:40px;padding:0 8px;gap:6px;font-size:.82rem}
+  .card-add svg{width:16px;height:16px}
+}
+/* Màn 360 trở xuống: thẻ chỉ ~150px, bỏ icon giỏ để chữ không bị cắt. */
+@media(max-width:374px){.card-add svg{display:none}}
 .trust{display:flex;gap:22px;flex-wrap:wrap;color:var(--color-muted);font-size:.85rem;border-top:1px solid var(--color-border);padding-top:18px}
 .trust span{display:inline-flex;align-items:center;gap:6px}.trust svg{width:16px;height:16px;color:var(--color-primary)}
 .content{max-width:720px;margin:0 auto;padding:44px 20px 64px}
@@ -1845,7 +1992,15 @@ ${Array.from({ length: 8 }, (_, i) => `#gsel-${i}:checked~.main .stack .s-${i}{d
   .pd-actions .btn{min-width:0;padding:12px 10px;font-size:.92rem;white-space:nowrap}
   /* Chừa chỗ để nội dung cuối trang không bị thanh dính che. */
   .pd{padding-bottom:16px}
+  /* Cột 1fr = minmax(auto,1fr): cột KHÔNG co dưới min-content của con (CLAUDE.md §4). Thanh
+     mua [SL][Thêm vào giỏ][Mua ngay] nowrap có min-content ~351px, nên ở 320px cả cột thông tin
+     nở ra 311px và trang cuộn ngang 31px (đo 31/10/2026, có từ trước trên main). */
+  .pd-grid{grid-template-columns:minmax(0,1fr)}.pd-grid>*{min-width:0}
 }
+@media(max-width:374px){.pd-actions .qty{width:54px}.pd-actions .btn{padding:12px 6px;font-size:.85rem}}
+/* Ô chọn ảnh của form đánh giá: control gốc có bề rộng NỘI TẠI (~378px) không co — cùng lỗi
+   input[type=file] ở trang nhập của quản trị (CLAUDE.md §9.3b đợt 7). */
+.rv-form input[type=file]{max-width:100%}
 /* ── Drawer giỏ hàng (Phase 2, chỉ hoạt động khi có JS — shell TĨNH, JS đổ dữ liệu) ──
    z-index 70/71: trên header (20), menu/search (30), lightbox (50). [hidden] phải thắng
    display:flex → khai display:none tường minh. prefers-reduced-motion: rule toàn cục
@@ -2393,11 +2548,12 @@ function withHomeSections(layout) {
 export function renderHome(ctx, { canonical = null, prevUrl = null, nextUrl = null } = {}) {
   const base = Array.isArray(ctx.theme?.layout) && ctx.theme.layout.length ? ctx.theme.layout : DEFAULT_LAYOUT;
   const layout = withHomeSections(base);
+  const hctx = { ...ctx, homeSections: new Set(layout.map((s) => s && s.section)) };
   const body = layout
-    .map((s) => (SECTIONS[s.section] ? SECTIONS[s.section](s.props ?? {}, ctx) : ''))
+    .map((s) => (SECTIONS[s.section] ? SECTIONS[s.section](s.props ?? {}, hctx) : ''))
     .join('\n');
   const head = metaHead({
-    description: `${ctx.shop.name} — cửa hàng trực tuyến. Giao hàng toàn quốc, thanh toán COD hoặc chuyển khoản QR.`,
+    description: `${ctx.shop.name} — cửa hàng trực tuyến. Đặt hàng nhanh, trả tiền khi nhận hàng.`,
     canonical, prevUrl, nextUrl, ogTitle: ctx.shop.name, siteName: ctx.shop.name, ogImage: shopOgImage(ctx),
   });
   return page(ctx.shop.name, ctx.theme?.tokens, body, head, ctx.nonce);
@@ -2450,20 +2606,11 @@ export function renderProducts(ctx, { canonical = null, prevUrl = null, nextUrl 
     .map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v === true ? '1' : v)}">`).join('');
   const searchHidden = hInputs([['cat', catSlug], ['sort', sortCur], ['instock', f.instock], ['pmin', f.pmin], ['pmax', f.pmax]]);
   const filterHidden = hInputs([['cat', catSlug], ['q', query], ['sort', sortCur]]);
-  // Sidebar bộ lọc — <details open>: desktop luôn mở (CSS ẩn summary), mobile gập được (no-JS).
-  const sidebar = `<details class="pf-side" open>
-        <summary class="pf-toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="17" x2="14" y2="17"/></svg><span>Bộ lọc</span><span class="pf-caret" aria-hidden="true">▾</span></summary>
-        <div class="pf-body">
-          <form class="pf-search" method="GET" action="/products" role="search">${searchHidden}
+  const searchForm = (cls) => `<form class="${cls}" method="GET" action="/products" role="search">${searchHidden}
             <input name="q" value="${esc(query)}" placeholder="Tìm sản phẩm…" aria-label="Tìm sản phẩm">
             <button type="submit" aria-label="Tìm">${I_SEARCH}</button>
-          </form>
-          <div class="pf-group">
-            <h3 class="pf-h">Danh mục</h3>
-            ${catList}
-          </div>
-          <form class="pf-filter" method="GET" action="/products">${filterHidden}
-            <div class="pf-group">
+          </form>`;
+  const filterGroups = `<div class="pf-group">
               <h3 class="pf-h">Tình trạng</h3>
               <label class="pf-chk"><input type="checkbox" name="instock" value="1"${f.instock ? ' checked' : ''}> Còn hàng</label>
             </div>
@@ -2475,20 +2622,68 @@ export function renderProducts(ctx, { canonical = null, prevUrl = null, nextUrl 
                 <input class="pf-num" name="pmax" inputmode="numeric" value="${f.pmax != null ? f.pmax : ''}" placeholder="Đến (đ)" aria-label="Giá đến (đồng)">
               </div>
               <button class="pf-apply" type="submit">Áp dụng</button>
-            </div>
+            </div>`;
+  // Sidebar bộ lọc (MÁY TÍNH): luôn mở, sticky cạnh lưới. Trên điện thoại nó bị ẩn hẳn và
+  // nhường chỗ cho .pf-mbar (ô tìm + hàng danh mục) và nút "Lọc" gập — xem dưới.
+  //
+  // Vì sao không dùng một <details open> chung cho cả hai màn như trước: thuộc tính `open` nằm
+  // trong HTML, CSS không đóng được nó theo bề rộng màn hình. Nên điện thoại nhận bộ lọc MỞ
+  // SẴN, cao ~1150px, và sản phẩm đầu tiên nằm ở y≈1030 trên màn 844 — khách mở "Tất cả sản
+  // phẩm" mà không thấy sản phẩm nào (đo 31/10, cả 5 mẫu giao diện). Hai bản form là cái giá
+  // của đường không-JS: bản đang ẩn là display:none nên không vào cây trợ năng, không bị Tab.
+  const sidebar = `<aside class="pf-side" aria-label="Bộ lọc">
+        <div class="pf-body">
+          ${searchForm('pf-search')}
+          <div class="pf-group">
+            <h3 class="pf-h">Danh mục</h3>
+            ${catList}
+          </div>
+          <form class="pf-filter" method="GET" action="/products">${filterHidden}
+            ${filterGroups}
           </form>
         </div>
-      </details>`;
+      </aside>`;
+  // ĐIỆN THOẠI: ô tìm + hàng danh mục lướt ngang (kiểu tab của sàn), rồi tới lưới. Nhánh đang
+  // xem có danh mục con → thêm hàng thứ hai cho con, đứng đầu là "Tất cả <cha>".
+  const cats = Array.isArray(ctx.categories) ? ctx.categories : [];
+  const chip = (cs, label) => {
+    const on = (cs ?? null) === (catSlug ?? null);
+    return `<a class="pf-chip${on ? ' on' : ''}" href="${esc(catHref(cs))}"${on ? ' aria-current="true"' : ''}>${esc(label)}</a>`;
+  };
+  const branch = cats.find((c) => c.slug === activeParentSlug);
+  const branchKids = branch && Array.isArray(branch.children) ? branch.children : [];
+  const chipsTop = cats.length
+    ? `<nav class="pf-chips" aria-label="Danh mục">${chip(null, 'Tất cả')}${cats.map((c) => {
+      const on = c.slug === catSlug || c.slug === activeParentSlug;
+      return `<a class="pf-chip${on ? ' on' : ''}" href="${esc(catHref(c.slug))}"${c.slug === catSlug ? ' aria-current="true"' : ''}>${esc(c.name)}</a>`;
+    }).join('')}</nav>` : '';
+  const chipsSub = branchKids.length
+    ? `<nav class="pf-chips pf-chips-sub" aria-label="Danh mục con">${chip(branch.slug, `Tất cả ${branch.name}`)}${branchKids.map((k) => chip(k.slug, k.name)).join('')}</nav>` : '';
+  const mbar = `<div class="pf-mbar">
+        ${searchForm('pf-search pf-msearch')}
+        ${chipsTop}${chipsSub}
+      </div>`;
+  // Nút "Lọc" gập (chỉ điện thoại). ĐÓNG mặc định kể cả khi đang lọc: mở sẵn thì bảng lọc phủ
+  // lên lưới ngay sau mỗi lần áp dụng. Thay vào đó nhãn đếm số điều kiện đang áp.
+  const nLoc = (f.instock ? 1 : 0) + (f.pmin != null || f.pmax != null ? 1 : 0);
+  const mfilter = `<details class="pf-mfilter">
+            <summary class="pf-mtoggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="17" x2="14" y2="17"/></svg><span>Lọc${nLoc ? ` · ${nLoc}` : ''}</span></summary>
+            <form class="pf-filter pf-mpanel" method="GET" action="/products">${filterHidden}
+              ${filterGroups}
+            </form>
+          </details>`;
   const cards = ctx.products.length ? productCards(ctx.products) : '<p class="empty">Chưa có sản phẩm nào phù hợp.</p>';
   const count = pi ? Number(pi.total) : ctx.products.length;
   const body = `${SECTIONS.header({}, ctx)}
-    <main class="wrap section" id="san-pham">
+    <main class="wrap section pf-page" id="san-pham">
       <div class="pf-title-row">${crumb}<h1 class="products-title">${esc(pageTitle)}</h1></div>
+      ${mbar}
       <div class="pf-layout">
         ${sidebar}
         <div class="pf-main">
           <div class="pf-head">
             <p class="pf-count">${esc(String(count))} sản phẩm</p>
+            ${mfilter}
             ${ctx.products.length || filterParts(pi).length ? sortBar(pi) : ''}
           </div>
           <div class="grid pf-grid">${cards}</div>
@@ -2497,7 +2692,7 @@ export function renderProducts(ctx, { canonical = null, prevUrl = null, nextUrl 
       </div>
     </main>${SECTIONS.footer({}, ctx)}`;
   const head = metaHead({
-    description: `${pageTitle} — ${ctx.shop.name}. Giao hàng toàn quốc, thanh toán COD hoặc chuyển khoản QR.`,
+    description: `${pageTitle} — ${ctx.shop.name}. Đặt hàng nhanh, trả tiền khi nhận hàng.`,
     canonical, prevUrl, nextUrl, ogTitle: `${pageTitle} — ${ctx.shop.name}`, siteName: ctx.shop.name, ogImage: shopOgImage(ctx),
   });
   return page(`${pageTitle} — ${ctx.shop.name}`, ctx.theme?.tokens, body, head, ctx.nonce);
@@ -2736,7 +2931,7 @@ export function renderProduct(ctx, p, { canonical = null } = {}) {
           ${stockBadge}
           ${selector}
           ${actions}
-          <div class="trust"><span>${I_TRUCK}Giao hàng toàn quốc</span><span>${I_SHIELD}Thanh toán COD hoặc QR</span></div>
+          <div class="trust">${trustSpans(ctx, 3)}</div>
           ${descHtml}
         </div>
       </div>

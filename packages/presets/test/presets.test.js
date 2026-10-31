@@ -61,9 +61,9 @@ for (const slug of SLUGS) {
     assert.equal(new Set(keys).size, keys.length, 'section bị trùng trong layout');
   });
 
-  test(`[${slug}] features đúng 4 mục · nav_links ≤6 nội bộ`, () => {
+  test(`[${slug}] features (nếu có items thì đúng 4 mục) · nav_links ≤6 nội bộ`, () => {
     const feat = p.layout.find((s) => s.section === 'features');
-    if (feat) {
+    if (feat && feat.props.items !== undefined) {
       assert.ok(Array.isArray(feat.props.items) && feat.props.items.length === 4, 'features phải đúng 4 mục');
       for (const it of feat.props.items) assert.ok(it.title && it.desc, 'mỗi feature cần title+desc');
     }
@@ -103,5 +103,49 @@ test('tokensToCss: radius 0 → nút+ô danh mục vuông; radius khác → gi�
   for (const slug of SLUGS) {
     const css = tokensToCss(getPreset(slug).tokens);
     assert.equal(css.includes('--btn-radius: 0'), slug === 'furniture', `${slug}: cờ sharp sai`);
+  }
+});
+
+// ── KHÔNG LỜI HỨA THAY SHOP (31/10/2026) ─────────────────────────────────────────────────
+// Preset được chép vào theme của shop lúc đăng ký và hiện ra như lời CHÍNH SHOP nói. Bản cũ
+// hứa freeship từ 500k, đổi trả 30 ngày, bảo hành 5 năm, 2 showroom, VietGAP… cho mọi shop
+// chọn ngành đó. Chốt quét TOÀN BỘ chữ trong layout (đệ quy mọi chuỗi), không chỉ vài khoá,
+// để một câu hứa nhét vào khoá mới (story, promo title…) cũng bị bắt.
+const HUA = [
+  /giao (hàng|lắp|nhanh)|giao tận nơi trong|freeship|miễn phí (giao|vận)/i,
+  /đổi trả|hoàn tiền|bảo hành|chính hãng|vietgap|showroom|cam kết|kiểm (tra )?hàng/i,
+  /\d+\s*(giờ|ngày|năm)\b/i,
+];
+const chuoi = (v, out = []) => {
+  if (typeof v === 'string') out.push(v);
+  else if (Array.isArray(v)) v.forEach((x) => chuoi(x, out));
+  else if (v && typeof v === 'object') Object.values(v).forEach((x) => chuoi(x, out));
+  return out;
+};
+for (const slug of SLUGS) {
+  test(`[${slug}] không hứa chính sách thay shop (topbar · cam kết · menu giả)`, () => {
+    const p = getPreset(slug);
+    const hdr = p.layout.find((s) => s.section === 'header').props;
+    assert.ok(!('topbar_text' in hdr), 'preset không được đặt topbar_text — thanh thông báo là tin thật của shop');
+    const feat = p.layout.find((s) => s.section === 'features');
+    assert.ok(!feat || feat.props.items === undefined, 'features không được mang items: dùng 4 câu mặc định của nền tảng');
+    for (const str of chuoi(p.layout)) {
+      for (const re of HUA) assert.doesNotMatch(str, re, `câu hứa thay shop: "${str}"`);
+    }
+    // Link menu mang TÊN danh mục nhưng trỏ /products (cả cửa hàng) là menu giả.
+    for (const l of hdr.nav_links ?? []) {
+      assert.ok(/^\/products(\?sort=[a-z_]+)?$/.test(l.url), `nav url lạ: ${l.url}`);
+      assert.ok(['Tất cả sản phẩm', 'Hàng mới', 'Khuyến mãi'].includes(l.label), `menu mang tên danh mục shop chưa có: "${l.label}"`);
+    }
+  });
+}
+
+// Dải cam kết phải đứng NGAY dưới hero (dải mỏng kiểu sàn), không chìm cuối trang.
+test('mọi preset: features đứng ngay sau hero / hero_side', () => {
+  for (const slug of SLUGS) {
+    const secs = getPreset(slug).layout.map((s) => s.section);
+    const fi = secs.indexOf('features');
+    assert.ok(fi > 0, `${slug}: thiếu features`);
+    assert.ok(['hero', 'hero_side'].includes(secs[fi - 1]), `${slug}: features phải ngay sau hero/hero_side, đang sau ${secs[fi - 1]}`);
   }
 });

@@ -23,13 +23,13 @@ tenant bằng **RLS**. Tất cả chạy bằng Docker Compose.
 
 | số đo | hôm nay | nguồn |
 |---|---:|---|
-| dòng mã ứng dụng | ~48.900 | `apps/*/src/*.js` |
-| dòng test | ~35.472 | `apps/*/test/*.{js,mjs}` |
+| dòng mã ứng dụng | ~50.700 | `apps/*/src/*.js` |
+| dòng test | ~38.800 | `apps/*/test/*.{js,mjs}` |
 | migration | 185 tệp, mới nhất `0187` | `packages/db/migrations/` |
-| bộ unit | 44 | `MANIFEST_UNIT_COUNT` |
+| bộ unit | 45 | `MANIFEST_UNIT_COUNT` |
 | bộ e2e | 114 | `MANIFEST_E2E_COUNT` |
 | bất biến DB | 9 bộ, 152 test TAP | `packages/db/test/*.test.js` |
-| tài liệu | 83 tệp | `docs/` |
+| tài liệu | 84 tệp | `docs/` |
 
 Tỉ lệ test/mã ≈ 0,73 — cao có chủ ý, xem §4.
 
@@ -88,7 +88,7 @@ clone: `git config core.hooksPath scripts/hooks`.
 apps/<service>/src/     mã service        apps/<service>/test/    test của nó
 packages/               mã DÙNG CHUNG     packages/db/migrations/ toàn bộ SQL
 infra/compose.*.yml     dàn dịch vụ       scripts/                cổng, seed, vận hành
-docs/                   83 tệp ghi chép   .github/workflows/ci.yml cổng đám mây
+docs/                   84 tệp ghi chép   .github/workflows/ci.yml cổng đám mây
 ```
 
 | việc cần sửa | file |
@@ -388,7 +388,7 @@ giá trị nhất khi đọc lại.
 | kiến trúc, dữ liệu, hạ tầng | `docs/01`, `02`, `03`, `06` |
 | **11 quyết định kiến trúc** — đọc trước khi định làm khác | **`docs/04`** |
 | xác thực & quyền | `07`, `08`, `10`, `29`, `59` · **`73` cửa vào + wizard thiết lập đầu tiên** |
-| bán hàng | `11` catalog · `12` kho/ảnh · `13` storefront · `14` checkout · `38` flash sale · `56` biến thể · `82` quán ăn (lời dặn, giờ nhận đơn) |
+| bán hàng | `11` catalog · `12` kho/ảnh · `13` storefront · `14` checkout · `38` flash sale · `56` biến thể · `82` quán ăn (lời dặn, giờ nhận đơn) · `83` cửa hàng bán lẻ kiểu sàn |
 | **thiết kế giao diện** | **`44` bảng điều khiển người bán · `72` cửa hàng công khai** — ngân sách token, thang chữ, nhịp 4px · `73` trang đăng nhập/đăng ký |
 | di cư từ sàn khác | `45` khung chung (Shopify/Haravan) · **`70` TikTok Shop — quyết định + số đo** · `71` brief thi công (tự chứa, đưa cho người ngoài) |
 | tiền | `15`,`16` QR · `37` lãi lỗ · `41` điểm · `49` thuê bao · `51`–`53` săn lỗ tiền · `54` sửa đơn · `55` tiền lạc · `66` công nợ · `67` tranh chấp · `68` email · `69` phí ship |
@@ -1934,6 +1934,27 @@ bằng đúng hợp các GRANT trong migration rồi đối chiếu `information
 
 Đợt kế tiếp (chờ chủ dự án chọn): hết món theo ngày / suất tối đa · nhận tại quán · nút đặt
 lại · giao diện kiểu thực đơn · topping nhiều lựa chọn có giá (đụng tiền, cần kế hoạch riêng).
+
+### Cửa hàng BÁN LẺ kiểu sàn — cùng nhánh, CHƯA MERGE (`docs/83`)
+
+Chủ dự án chốt (31/10): TikFlash cho **cả** shop bán lẻ online **và** quán ăn giao đi, shop chọn
+ngành lúc đăng ký; một cửa hàng thời trang làm mẫu **bố cục** cho bán lẻ (không chép thương hiệu).
+Chọn làm bán lẻ trước; quán ăn sẽ là ngành riêng "Quán ăn / Giao đồ ăn" với cửa hàng kiểu thực
+đơn, còn "Thực phẩm / Đồ uống" giữ cho tạp hoá.
+
+Đã làm, không đụng tiền/giá/phí ship: điện thoại thấy hàng ở màn đầu (thẻ đầu tiên y 1146–1201 →
+684 trên trang chủ, 1021–1042 → 329 ở `/products`) · nhãn "-N%" và "Bán chạy" (≥50 đã bán THẬT) ·
+**bỏ mọi câu hứa thay shop** khỏi 5 mẫu (thanh trên đầu, cam kết, menu giả) — cam kết mặc định chỉ
+còn bốn điều nền tảng bảo đảm được, admin và storefront so BẰNG · giỏ/thanh toán cùng giọng với
+cửa hàng, giỏ đổi số lượng bằng −/+ (một form, nút mang **số lượng đích** nên bấm lặp không cộng
+dồn, chạy không cần JS). Shop đang chạy giữ giao diện đã lưu tới khi bấm "Áp mẫu".
+
+Kiểm chứng: `apps/storefront/test/ban-le.test.js` 13/13 (manifest unit 44 → 45) · 17/17 đột biến
+đỏ · 30/30 phép đo tràn ngang (5 trang × 320/360/390 × JS bật/tắt) · ảnh 5 mẫu trước/sau, đã nhìn.
+Hai lỗi có từ trước tìm ra bằng probe và đã vá: trang SP cuộn ngang 31px ở 320px, ô chọn ảnh của
+form đánh giá rộng nội tại 378px. Còn nợ: chân trang luôn ghi "Chuyển khoản QR" kể cả shop chưa
+bật QR; `scripts/probe-360.mjs` báo đỏ giả cho ô `.hp`/checkbox 1px trên cửa hàng và đường dẫn
+Chromium mặc định đã cũ (đặt `PROBE_CHROME`).
 
 ### 9.4 Bắt đầu một phiên mới thế nào
 

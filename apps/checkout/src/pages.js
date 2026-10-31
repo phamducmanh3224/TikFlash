@@ -26,6 +26,9 @@ const carrierTrackUrl = (c, code) => {
 // Icon giỏ nội tuyến (đồng bộ với storefront; là markup nên hợp CSP).
 const I_CART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M2 3h2l2.4 12.3a1 1 0 0 0 1 .8h8.7a1 1 0 0 0 1-.8L21 7H5.6"/></svg>';
 
+// Biểu tượng tra cứu đơn: tờ hoá đơn + kính lúp (cùng nét 1.6 với I_CART).
+const I_LOOKUP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 21H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v6"/><path d="M8 7h8M8 11h5"/><circle cx="17" cy="16" r="3"/><path d="m19.2 18.2 2.3 2.3"/></svg>';
+
 /** SVG QR nội tuyến (không tải resource ngoài → hợp CSP). */
 export async function qrSvg(text) {
   try { return await QRCode.toString(text, { type: 'svg', margin: 1, width: 220 }); }
@@ -71,18 +74,27 @@ a{color:var(--pri);text-decoration:none}a:hover{text-decoration:underline}
 .wrap{max-width:600px;margin:0 auto;padding:16px 20px}
 @media(min-width:680px){.wrap{max-width:640px;padding:24px 20px}}
 .hdr{position:sticky;top:0;z-index:20;background:var(--card);background:color-mix(in srgb,var(--card) 80%,transparent);backdrop-filter:saturate(180%) blur(12px);-webkit-backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid var(--bd)}
-.hdr .wrap{display:flex;justify-content:space-between;align-items:center;min-height:58px;padding:8px 20px}
-.brand{font-weight:800;font-size:1.14rem;letter-spacing:-.02em;background:linear-gradient(135deg,var(--brand),var(--pri2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.brand:hover{text-decoration:none}
-.hnav{display:flex;align-items:center;gap:18px;font-size:.9rem}
-.hnav a{color:var(--mut);font-weight:500;transition:color .15s}.hnav a:hover{color:var(--ink);text-decoration:none}
-.hnav .cart{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-weight:600}.hnav .cart svg{width:18px;height:18px}
+/* Đầu trang đi CÙNG giọng với cửa hàng (31/10/2026, docs/83): tên shop chữ đặc màu mực như
+   header cửa hàng, không phải chữ gradient — khách bấm "Thanh toán" mà thấy một đầu trang khác
+   hẳn thì tưởng bị đưa sang trang lạ. Đo ở 390px trước khi sửa: tên "Cơm Nhà Bếp Cam" gãy hai
+   dòng, "Tra cứu đơn" và "Giỏ hàng" cũng gãy, đầu trang cao gấp đôi. Nay tên shop MỘT dòng (dài
+   thì cắt bằng dấu …), còn hai lối tắt ở màn hẹp xếp biểu tượng trên chữ nhỏ — đúng kiểu thanh
+   dưới đáy của cửa hàng mà khách vừa thấy. Chữ vẫn nằm trong HTML: trình đọc màn hình đọc đủ. */
+.hdr .wrap{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:58px;padding:8px 20px}
+.brand{min-width:0;font-weight:800;font-size:1.14rem;letter-spacing:-.02em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand:hover{text-decoration:none;color:var(--ink)}
+.hnav{display:flex;align-items:center;gap:18px;font-size:.9rem;flex:0 0 auto}
+.hnav a{display:inline-flex;align-items:center;gap:6px;color:var(--soft);font-weight:500;white-space:nowrap;transition:color .15s}.hnav a:hover{color:var(--pri);text-decoration:none}
+.hnav svg{width:20px;height:20px;flex:0 0 auto}
+.hnav .cart{color:var(--ink);font-weight:600}
+@media(max-width:560px){.hnav{gap:4px}.hnav a{flex-direction:column;gap:1px;min-width:56px;padding:4px 2px;font-size:.7rem;line-height:1.2}.hnav svg{width:22px;height:22px}}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r-lg);padding:18px 20px;margin:14px 0;box-shadow:var(--sh-sm)}
 .card[style*="text-align:center"]{position:relative;overflow:hidden;background:linear-gradient(180deg,color-mix(in srgb,var(--pri) 8%,var(--card)),var(--card));border-color:color-mix(in srgb,var(--pri) 24%,var(--bd));box-shadow:var(--sh)}
 .card[style*="text-align:center"]::before{content:"";position:absolute;inset:-40% 0 auto 0;height:150px;background:radial-gradient(60% 100% at 50% 0,color-mix(in srgb,var(--pri) 26%,transparent),transparent 70%);pointer-events:none}
 .card[style*="text-align:center"] h1{position:relative;font-size:1.6rem;background:none;-webkit-text-fill-color:var(--ink);color:var(--ink);text-shadow:0 2px 20px color-mix(in srgb,var(--pri) 22%,transparent)}
 .card[style*="text-align:center"] p{position:relative}
-h1{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;line-height:1.15;text-wrap:balance;margin:.2em 0 .55em;background:linear-gradient(135deg,var(--brand),var(--pri2));-webkit-background-clip:text;background-clip:text;color:transparent}
+h1{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;line-height:1.15;text-wrap:balance;margin:.2em 0 .55em;color:var(--ink)}
 h2{font-size:1rem;margin:0 0 .7em;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
 .row{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid color-mix(in srgb,var(--bd) 65%,transparent)}
 .row:last-child{border-bottom:0}.muted{color:var(--mut);font-size:.9rem}.right{text-align:right}
@@ -101,6 +113,24 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--pri);box
    cùng class nên thừa hưởng luôn 70px ⇒ chữ gợi ý 'Mã giảm giá' bị cắt còn 'MÃ G', khách
    nhìn tưởng ô nhập số. Tách riêng ô [name=code]: cho nó nở hết chỗ trống, canh trái. */
 .qty{display:flex;gap:8px;align-items:center}.qty input{width:70px;text-align:center}
+/* Dòng giỏ (31/10/2026, docs/83): lưới ba cột ảnh · tên · thành tiền, hàng dưới là nút −/+
+   bên trái và "Xoá" bên phải, nằm dưới đúng cột thành tiền. Bản cũ dồn mọi thứ vào cột tên
+   (~150px ở 390px), nên ô số + "Cập nhật" + "Xoá" chồng ba tầng, còn thành tiền thì lấn ra
+   sát mép thẻ vì cột phải không có chỗ tựa. Lưới cho cột phải đúng bề rộng con số (auto) và
+   cột giữa co được (minmax(0,1fr)) — đúng bẫy min-width:auto ở CLAUDE.md §4. */
+.cline{display:grid;grid-template-columns:56px minmax(0,1fr) auto;grid-template-areas:"img meta tot" "img ctl ctl";column-gap:12px;padding:12px 0;border-bottom:1px solid color-mix(in srgb,var(--bd) 65%,transparent)}
+.cline:last-child{border-bottom:0}
+.cline>.cthumb{grid-area:img}
+.cl-meta{grid-area:meta;min-width:0;line-height:1.45}
+.cl-tot{grid-area:tot;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cl-ctl{grid-area:ctl;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 0}
+.stepper{display:inline-flex;align-items:center;border:1.5px solid var(--bd);border-radius:var(--pill);background:var(--card)}
+.stp{width:42px;height:40px;padding:0;border:0;border-radius:var(--pill);background:none;color:var(--ink);font:inherit;font-size:1.2rem;font-weight:600;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.stp:hover{background:var(--wash);color:var(--pri)}
+.stp:disabled,.stp:disabled:hover{color:var(--mut);background:none;cursor:not-allowed;opacity:.5}
+.stp-n{min-width:28px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.it-del{width:auto;padding:8px 2px;border:0;background:none;color:var(--bad);font:inherit;font-size:.9rem;font-weight:600;cursor:pointer}
+.it-del:hover{text-decoration:underline}
 .qty input[name="code"]{width:auto;flex:1 1 auto;min-width:0;text-align:left}
 .qtybtn{width:auto;white-space:nowrap;padding:9px 14px;border:1.5px solid var(--bd);background:var(--card);border-radius:var(--r);font-size:.9rem;font-weight:600;cursor:pointer;text-decoration:none;text-align:center;color:var(--ink);transition:border-color .15s,color .15s,background .15s}.qtybtn:hover{background:var(--wash);border-color:color-mix(in srgb,var(--pri) 30%,var(--bd))}
 .pay label{display:flex;gap:10px;align-items:center;font-weight:500;padding:14px;border:1.5px solid var(--bd);border-radius:var(--r);margin:8px 0;cursor:pointer;background:var(--card);transition:border-color .15s,box-shadow .15s,background .15s}
@@ -166,28 +196,43 @@ function page(title, shopName, bodyHtml, extraHead = '', bodyClass = '') {
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>${esc(title)}</title>${extraHead}<style>${STYLE}</style></head><body>
 <header class="hdr"><div class="wrap"><a class="brand" href="/">${esc(shopName || 'Cửa hàng')}</a>
-<nav class="hnav"><a href="/checkout/lookup">Tra cứu đơn</a><a href="/cart" class="cart">${I_CART}Giỏ hàng</a></nav></div></header>
+<nav class="hnav" aria-label="Lối tắt"><a href="/checkout/lookup">${I_LOOKUP}<span>Tra cứu đơn</span></a><a href="/cart" class="cart">${I_CART}<span>Giỏ hàng</span></a></nav></div></header>
 <main class="wrap${bodyClass ? ' ' + bodyClass : ''}">${bodyHtml}</main></body></html>`;
 }
 
 // Mọi thao tác đổi giỏ là POST form (sameOrigin chỉ chặn được POST/PATCH, KHÔNG chặn
 // GET → không dùng link GET để sửa, tránh CSRF qua <img>/prefetch).
-const itemsBlock = (items) => items.map((it) => `
-  <div class="row"><div class="it">
+//
+// Nút −/+ (31/10/2026, docs/83) — MỘT form, ba nút submit, mỗi nút mang SỐ LƯỢNG ĐÍCH
+// (name="qty" value="N") chứ không mang "+1". Trình duyệt chỉ gửi name/value của đúng nút được
+// bấm, nên không cần JavaScript, và server giữ nguyên hợp đồng cũ (variant_id + qty, 0 = xoá).
+// Mang số ĐÍCH là thứ làm nó chịu được bấm-lặp: bấm "+" hai lần trước khi trang kịp tải lại gửi
+// hai lần qty=3, không phải hai lần "+1" — giỏ ra 3, không ra 4. Form không có ô gõ nào nên
+// cũng không có đường gửi-bằng-Enter mang qty rỗng. Trần 1000 khớp chốt của updateItemForm:
+// để nút "+" gửi 1001 là mời khách vào một trang lỗi 400.
+const QTY_MAX = 1000;
+const itemsBlock = (items) => items.map((it) => {
+  const ten = esc(it.product_title) + (it.variant_title ? ` — ${esc(it.variant_title)}` : '');
+  const q = Number(it.qty);
+  return `
+  <div class="cline">
     ${it.image ? `<img class="cthumb" src="${esc(it.image)}" alt="" loading="lazy" width="52" height="52">` : '<div class="cthumb ph"></div>'}
-    <div>
-    <div>${esc(it.product_title)}${it.variant_title ? ` — <span class="muted">${esc(it.variant_title)}</span>` : ''}</div>
-    <div class="muted">${it.orig_unit_price_vnd ? `<s>${money(it.orig_unit_price_vnd)}</s> <span style="color:#b91c1c;font-weight:600">${money(it.unit_price_vnd)}</span> <span style="color:#b91c1c">-${esc(it.sale_off_pct)}%</span>` : money(it.unit_price_vnd)} / sp</div>
-    <form method="POST" action="/cart/update" class="qty" style="margin-top:6px">
+    <div class="cl-meta">
+      <div>${esc(it.product_title)}${it.variant_title ? ` — <span class="muted">${esc(it.variant_title)}</span>` : ''}</div>
+      <div class="muted">${it.orig_unit_price_vnd ? `<s>${money(it.orig_unit_price_vnd)}</s> <span style="color:#b91c1c;font-weight:600">${money(it.unit_price_vnd)}</span> <span style="color:#b91c1c">-${esc(it.sale_off_pct)}%</span>` : money(it.unit_price_vnd)} / sp</div>
+    </div>
+    <div class="cl-tot"><strong>${money(it.line_total_vnd)}</strong></div>
+    <form method="POST" action="/cart/update" class="cl-ctl">
       <input type="hidden" name="variant_id" value="${esc(it.variant_id)}">
-      <input type="number" name="qty" value="${it.qty}" min="0" max="1000" inputmode="numeric" aria-label="Số lượng">
-      <button class="qtybtn" type="submit" title="Cập nhật">Cập nhật</button>
+      <span class="stepper">
+        <button class="stp" type="submit" name="qty" value="${Math.max(0, q - 1)}" aria-label="${q <= 1 ? 'Bỏ' : 'Giảm số lượng'} ${ten}">−</button>
+        <span class="stp-n"><span class="sr">Số lượng </span>${q}</span>
+        <button class="stp" type="submit" name="qty" value="${Math.min(QTY_MAX, q + 1)}" aria-label="Tăng số lượng ${ten}"${q >= QTY_MAX ? ' disabled' : ''}>+</button>
+      </span>
+      <button class="it-del" type="submit" name="qty" value="0" aria-label="Xoá ${ten} khỏi giỏ">Xoá</button>
     </form>
-    <form method="POST" action="/cart/update" style="margin-top:4px">
-      <input type="hidden" name="variant_id" value="${esc(it.variant_id)}"><input type="hidden" name="qty" value="0">
-      <button class="qtybtn" type="submit" style="width:auto;color:#b91c1c">Xoá</button>
-    </form>
-  </div></div><div class="right"><strong>${money(it.line_total_vnd)}</strong></div></div>`).join('');
+  </div>`;
+}).join('');
 
 // Món KHÔNG CÒN BÁN nằm trong giỏ (biến thể mồ côi: shop thu hẹp phân loại sau khi khách đã
 // thêm vào giỏ). Chúng bị loại khỏi tổng tiền — phải NÓI RA, vì lặng lẽ bớt món là khách
