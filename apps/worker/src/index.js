@@ -24,6 +24,7 @@ import { Queue, Worker } from 'bullmq';
 import nodemailer from 'nodemailer';
 import { runReq, makeLog, health } from './obs.js';
 import { buildSmtpOptions } from './smtp.js';
+import { tgDonMoi } from './tg-don-moi.js';
 import {
   canApplyKiotVietStock,
   createKiotVietClient,
@@ -4143,7 +4144,8 @@ const OUTBOX_GC_MS = Number(process.env.OUTBOX_GC_MS ?? 6 * 60 * 60 * 1000); // 
 async function sweepOutboxGc() {
   try {
     const r = await db.query(
-      `UPDATE outbox SET payload = payload - 'link' - 'to' - 'customer_name'
+      // customer_note (0187): chữ khách tự gõ ("gọi chị Lan 09…, nhà số 5") nên xử như PII.
+      `UPDATE outbox SET payload = payload - 'link' - 'to' - 'customer_name' - 'customer_note'
         WHERE processed_at IS NOT NULL
           AND (
             processed_at < now() - interval '7 days'
@@ -4153,7 +4155,8 @@ async function sweepOutboxGc() {
                     <= extract(epoch FROM clock_timestamp()) * 1000
             )
           )
-          AND (jsonb_exists(payload, 'link') OR jsonb_exists(payload, 'to') OR jsonb_exists(payload, 'customer_name'))`);
+          AND (jsonb_exists(payload, 'link') OR jsonb_exists(payload, 'to') OR jsonb_exists(payload, 'customer_name')
+               OR jsonb_exists(payload, 'customer_note'))`);
     if (r.rowCount) log('info', 'outbox_gc', { n: r.rowCount });
     return { scrubbed: r.rowCount };
   } catch (e) { log('error', 'outbox_gc_error', { message: e.message }); return { scrubbed: 0 }; }
@@ -4191,7 +4194,7 @@ async function sweepPiiRetention() {
            ), changed AS (
              UPDATE orders o
                 SET customer_name = '(đã ẩn danh)', customer_phone = NULL,
-                    customer_email = NULL, shipping_address = NULL,
+                    customer_email = NULL, shipping_address = NULL, customer_note = NULL,
                     client_ip_hash = NULL, customer_id = NULL, anonymized_at = now()
                FROM doomed d
               WHERE o.id = d.id
@@ -4486,7 +4489,7 @@ async function sweepTelegramLink() {
 // là shop tự thao tác, không cần báo).
 function tgMessageFor(topic, p) {
   const money = (v) => new Intl.NumberFormat('vi-VN').format(Number(v)) + 'đ';
-  if (topic === 'order.created') return `🛒 Đơn MỚI #${p.order_number} — ${money(p.total_vnd)} (${p.payment_method === 'qr' ? 'chờ CK QR' : 'COD'})${p.customer_name ? `\nKhách: ${p.customer_name}` : ''}`;
+  if (topic === 'order.created') return tgDonMoi(p, money);
   if (topic === 'order.paid') return `💰 Đơn #${p.order_number} ĐÃ THANH TOÁN — ${money(p.total_vnd)}. Chuẩn bị giao hàng.`;
   if (topic === 'order.status_changed' && p.status === 'cancelled') return `❌ Đơn #${p.order_number} đã huỷ${p.reason === 'expired' ? ' (tự huỷ quá hạn)' : ''}.`;
   if (topic === 'order.status_changed' && p.status === 'returned') return `↩️ Đơn #${p.order_number} bị HOÀN (bom hàng) — hàng đang về cửa hàng. Nhận lại hàng rồi cập nhật tồn kho (Điều chỉnh tồn).`;

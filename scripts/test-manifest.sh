@@ -131,16 +131,24 @@ MANIFEST_UNIT_FILES=(
   # dung trung thực (phải nói rõ đây là cửa hàng mẫu) và những dòng CSS mà mất đi sẽ làm
   # lỗi bố cục quay lại.
   apps/storefront/test/landing-nganh-hang.test.js
+  # Shop đồ ăn, đợt 1 (0187): lời dặn cắt ở mép 300 ký tự có emoji, tin Telegram đơn nhiều
+  # món, và CHỖ VIẾT của luật ẩn danh lời dặn — worker chỉ quét đơn cũ hơn N tháng nên e2e
+  # không chờ được tới lúc sweep chạy.
+  apps/checkout/test/do-an.test.js
+  # Cửa hàng bán lẻ kiểu sàn (docs/83): không câu hứa nào nói thay shop, nhãn "Bán chạy"/"-N%"
+  # chỉ từ dữ liệu thật, bộ lọc điện thoại không mở sẵn, và nút −/+ của giỏ mang SỐ LƯỢNG ĐÍCH
+  # (bấm lặp không cộng dồn, chạy không cần JavaScript).
+  apps/storefront/test/ban-le.test.js
 )
 
 # Số ĐÚNG hôm nay, không phải "sàn". Xem manifest_check bên dưới.
-MANIFEST_UNIT_COUNT=43
-MANIFEST_E2E_COUNT=113
+MANIFEST_UNIT_COUNT=45
+MANIFEST_E2E_COUNT=114
 # Số FILE migration, KHÔNG phải số thứ tự cao nhất. Dãy có khoảng trống (0157 chẳng hạn)
 # nên hôm nay là 182 file trong khi file mới nhất mang số 0184 — suy số lượng từ số thứ tự
 # là sai ngay từ hôm nay. scripts/fresh-migration-gate.sh so BẰNG với con số này, và so
 # thêm với số dòng thực trong schema_migrations của một DB TRẮNG.
-MANIFEST_MIGRATION_COUNT=184
+MANIFEST_MIGRATION_COUNT=185
 
 manifest_unit_files() {
   shopt -s nullglob

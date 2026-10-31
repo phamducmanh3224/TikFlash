@@ -77,7 +77,7 @@ chuyện của nền tảng — shop chọn preset "Mỹ phẩm" không có ngh�
 | preset | primary | radius | spacing | tính cách |
 |---|---|---:|---:|---|
 | Thời trang | `#17171a` gần đen | **0–2px** | 18px | editorial, tương phản cao |
-| Thực phẩm | `#0272ba` xanh dương | 8px | 16px | tươi, ấm |
+| Thực phẩm | `#c4470b` cam đậm | 8px | 16px | ấm, gần gũi (quán ăn — docs/82) |
 | **Nội thất** | `#446084` slate | **0px** | 20px | showroom, **góc vuông tuyệt đối** |
 | **Mỹ phẩm** | `#f36b7d` hồng | **12px** | 16px | mềm, nữ tính |
 | Khác | `#1f2933` than | 8px | 18px | trung tính |

@@ -4246,6 +4246,10 @@ const SETTINGS_SECTION_FIELDS = {
   ],
   operations: ['low_stock_threshold', 'max_pending_per_ip', 'max_pending_per_phone'],
   privacy: ['pii_retention_months'],
+  // Giờ nhận đơn + tạm nghỉ (0187). KHÔNG nằm trong đường ghi-đè-toàn-bộ PATCH /shops/:id —
+  // cố ý: form cũ đó không có các ô này, nên nếu nằm trong đó thì mỗi lần lưu form cũ là xoá
+  // giờ mở cửa. Chốt ở shop-patch.test.js.
+  hours: ['orders_paused', 'orders_pause_note', 'order_open_time', 'order_close_time'],
 };
 
 const SETTINGS_SECTION_NOTICE = {
@@ -4253,6 +4257,7 @@ const SETTINGS_SECTION_NOTICE = {
   shipping: 'Đã lưu cấu hình phí vận chuyển.',
   operations: 'Đã lưu ngưỡng vận hành và chống đơn ảo.',
   privacy: 'Đã lưu chính sách lưu dữ liệu khách.',
+  hours: 'Đã lưu giờ nhận đơn.',
 };
 
 function settingsApiError(r) {
@@ -4272,7 +4277,12 @@ async function settingsSectionSave(req, res, me, cookie, shopId, section) {
   if (section === 'shipping' && !body.ship_over_max_behavior) body.ship_over_max_behavior = 'region';
   const r = await sellerApi('PATCH', `/shops/${shopId}/settings/${section}`, { cookie, body });
   if (r.status === 200) {
-    return settingsPage(res, me, cookie, shopId, SETTINGS_SECTION_NOTICE[section], null);
+    // Nhóm giờ nhận đơn: câu báo phải nói TRẠNG THÁI MỚI chứ không chỉ "đã lưu" — bấm tạm
+    // nghỉ xong mà chỉ đọc "Đã lưu" thì người bán không chắc khách đã bị chặn hay chưa.
+    const notice = section === 'hours'
+      ? (body.orders_paused ? 'Đã bật TẠM NGHỈ — khách không đặt được đơn mới cho tới khi bạn mở lại.' : SETTINGS_SECTION_NOTICE.hours)
+      : SETTINGS_SECTION_NOTICE[section];
+    return settingsPage(res, me, cookie, shopId, notice, null);
   }
   return settingsPage(
     res,
@@ -4848,7 +4858,7 @@ async function handle(req, res, url, p) {
     // Cài đặt / hồ sơ cửa hàng (shop.write = owner/admin).
     if ((m = new RegExp(`^/shops/${UUID}/settings$`).exec(p)) && req.method === 'GET') return settingsPage(res, me, cookie, m[1], null, null);
     if ((m = new RegExp(`^/shops/${UUID}/settings$`).exec(p)) && req.method === 'POST') return settingsSave(req, res, me, cookie, m[1]);
-    if ((m = new RegExp(`^/shops/${UUID}/settings/(profile|shipping|operations|privacy)$`).exec(p)) && req.method === 'POST') return settingsSectionSave(req, res, me, cookie, m[1], m[2]);
+    if ((m = new RegExp(`^/shops/${UUID}/settings/(profile|shipping|operations|privacy|hours)$`).exec(p)) && req.method === 'POST') return settingsSectionSave(req, res, me, cookie, m[1], m[2]);
     if ((m = new RegExp(`^/shops/${UUID}/settings/require-mfa$`).exec(p)) && req.method === 'POST') return requireMfaSave(req, res, me, cookie, m[1]);
     if ((m = new RegExp(`^/shops/${UUID}/settings/unused-images$`).exec(p)) && req.method === 'POST') return unusedImagesScan(res, me, cookie, m[1]);
     if ((m = new RegExp(`^/shops/${UUID}/settings/unused-images/delete$`).exec(p)) && req.method === 'POST') return unusedImagesDelete(res, me, cookie, m[1]);

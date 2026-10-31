@@ -23,13 +23,13 @@ tenant bằng **RLS**. Tất cả chạy bằng Docker Compose.
 
 | số đo | hôm nay | nguồn |
 |---|---:|---|
-| dòng mã ứng dụng | ~48.900 | `apps/*/src/*.js` |
-| dòng test | ~35.472 | `apps/*/test/*.{js,mjs}` |
-| migration | 184 tệp, mới nhất `0186` | `packages/db/migrations/` |
-| bộ unit | 43 | `MANIFEST_UNIT_COUNT` |
-| bộ e2e | 113 | `MANIFEST_E2E_COUNT` |
-| bất biến DB | 9 bộ, 149 test TAP | `packages/db/test/*.test.js` |
-| tài liệu | 82 tệp | `docs/` |
+| dòng mã ứng dụng | ~50.700 | `apps/*/src/*.js` |
+| dòng test | ~38.800 | `apps/*/test/*.{js,mjs}` |
+| migration | 185 tệp, mới nhất `0187` | `packages/db/migrations/` |
+| bộ unit | 45 | `MANIFEST_UNIT_COUNT` |
+| bộ e2e | 114 | `MANIFEST_E2E_COUNT` |
+| bất biến DB | 9 bộ, 152 test TAP | `packages/db/test/*.test.js` |
+| tài liệu | 84 tệp | `docs/` |
 
 Tỉ lệ test/mã ≈ 0,73 — cao có chủ ý, xem §4.
 
@@ -75,7 +75,7 @@ với GitHub CI. Nó tự dựng PostgreSQL trắng trong project Compose riêng
 chạy đúng runner production **không seed**, rồi so ba chiều: số file = `MANIFEST_MIGRATION_COUNT`
 = số dòng thật trong `schema_migrations`, kèm 0 DRIFT / 0 pending. Tự dọn bằng `trap` ở mọi đường
 thoát, kể cả Ctrl-C. **Không chạm DB dev.** Thêm migration thì sửa `MANIFEST_MIGRATION_COUNT`
-trong cùng commit — đếm theo **FILE**, không theo số thứ tự (hôm nay 184 file / số cao nhất 0186).
+trong cùng commit — đếm theo **FILE**, không theo số thứ tự (hôm nay 185 file / số cao nhất 0187).
 
 Hook `scripts/hooks/pre-push` chạy `--fast` và **chặn push khi đỏ**. Cài một lần cho mỗi bản
 clone: `git config core.hooksPath scripts/hooks`.
@@ -88,7 +88,7 @@ clone: `git config core.hooksPath scripts/hooks`.
 apps/<service>/src/     mã service        apps/<service>/test/    test của nó
 packages/               mã DÙNG CHUNG     packages/db/migrations/ toàn bộ SQL
 infra/compose.*.yml     dàn dịch vụ       scripts/                cổng, seed, vận hành
-docs/                   82 tệp ghi chép   .github/workflows/ci.yml cổng đám mây
+docs/                   84 tệp ghi chép   .github/workflows/ci.yml cổng đám mây
 ```
 
 | việc cần sửa | file |
@@ -388,7 +388,7 @@ giá trị nhất khi đọc lại.
 | kiến trúc, dữ liệu, hạ tầng | `docs/01`, `02`, `03`, `06` |
 | **11 quyết định kiến trúc** — đọc trước khi định làm khác | **`docs/04`** |
 | xác thực & quyền | `07`, `08`, `10`, `29`, `59` · **`73` cửa vào + wizard thiết lập đầu tiên** |
-| bán hàng | `11` catalog · `12` kho/ảnh · `13` storefront · `14` checkout · `38` flash sale · `56` biến thể |
+| bán hàng | `11` catalog · `12` kho/ảnh · `13` storefront · `14` checkout · `38` flash sale · `56` biến thể · `82` quán ăn (lời dặn, giờ nhận đơn) · `83` cửa hàng bán lẻ kiểu sàn |
 | **thiết kế giao diện** | **`44` bảng điều khiển người bán · `72` cửa hàng công khai** — ngân sách token, thang chữ, nhịp 4px · `73` trang đăng nhập/đăng ký |
 | di cư từ sàn khác | `45` khung chung (Shopify/Haravan) · **`70` TikTok Shop — quyết định + số đo** · `71` brief thi công (tự chứa, đưa cho người ngoài) |
 | tiền | `15`,`16` QR · `37` lãi lỗ · `41` điểm · `49` thuê bao · `51`–`53` săn lỗ tiền · `54` sửa đơn · `55` tiền lạc · `66` công nợ · `67` tranh chấp · `68` email · `69` phí ship |
@@ -1902,6 +1902,59 @@ GitHub trả 403 cho cả xoá ref lẫn `refs/tags/*`. Chủ dự án xoá bằ
 
 Còn 31 nhánh trên remote, phần lớn đã merge từ lâu. Chưa ai dọn, và mỗi nhánh cũ là một lần
 `git merge` nhầm tay đang chờ xảy ra — chuyện vừa suýt xảy ra với nhánh ngay phía trên.
+
+### Hướng QUÁN ĂN — đợt 1 (`0187`), nhánh `claude/project-thread-ba2ia3`, CHƯA MERGE
+
+Chủ dự án (31/10) định hướng nền tảng cho **quán ăn bán online**: mỗi quán một trang riêng
+làm thêm kênh bán, không chịu phí sàn. Đợt 1 làm ba thứ quán ăn cần ở gần như mọi đơn mà kho
+chưa có ở đâu: **lời dặn của khách** (`orders.customer_note`, cột riêng, coi như PII) · **tin
+Telegram đơn mới có món + lời dặn** · **giờ nhận đơn + tạm nghỉ** (một hàm DB
+`shop_order_window_open`, giờ VN cố định; checkout chặn thật, cửa hàng + trang thanh toán báo
+trước). Chi tiết, giới hạn và lỗi của chính lượt này: `docs/82`.
+
+Cùng nhánh: trang KHÁCH thấy đổi sang **cam ấm** theo yêu cầu chủ dự án — mẫu *Thực phẩm*,
+checkout, tài khoản khách. Cam đậm vì chữ trắng trên cam sáng chỉ 2,8:1; chốt tương phản ≥ 4,5:1
+ở `apps/checkout/test/do-an.test.js` đo theo đúng biến `.btn` dùng, cả chế độ tối (`docs/82` §4).
+
+Giới hạn đã nói với chủ dự án: chỉ chặn đơn website (đơn tay + bot Messenger không bị chặn) ·
+dải báo trên cửa hàng có thể trễ 1–6 phút vì cache CDN, cổng checkout thì tức thì · chưa có
+nút tạm nghỉ nhanh ở Tổng quan · một khung giờ cho mọi ngày.
+
+Cổng đầy đủ 31/10 **chưa exit 0**: E2E 113/114 (bộ mới đỏ vì khẳng định ghim biểu tượng đã đổi —
+sửa xong chạy lại riêng 47/47) và `security-scan` đỏ vì advisory **high** mới của
+`decode-uri-component` ← `minio` — có sẵn trên `main`, cần việc riêng (xem `docs/82`).
+Đo: unit **353/353** · bất biến DB **152** · e2e mới `do-an.e2e.mjs` **47/47** · ma trận **19
+đột biến e2e/DB + 8 đột biến unit đều đỏ**, đối chứng mã sạch đầu/cuối 47/0. Bộ e2e mở stub
+Telegram ở `dbtest:9104` như `worker/test/e2e.mjs` — đừng chạy song song hai bộ.
+
+**Bài học đắt nhất của lượt này nằm ở phép đo, không ở sản phẩm:** `REVOKE UPDATE ON <bảng>`
+(cấp bảng) thu luôn mọi quyền UPDATE CẤP CỘT — hoàn nguyên một đột biến "cấp quyền cấp bảng"
+bằng REVOKE đã xoá 25 cột `0165` cấp cho `app_rw` trên DB dev. Đột biến quyền thì khôi phục
+bằng đúng hợp các GRANT trong migration rồi đối chiếu `information_schema.column_privileges`.
+
+Đợt kế tiếp (chờ chủ dự án chọn): hết món theo ngày / suất tối đa · nhận tại quán · nút đặt
+lại · giao diện kiểu thực đơn · topping nhiều lựa chọn có giá (đụng tiền, cần kế hoạch riêng).
+
+### Cửa hàng BÁN LẺ kiểu sàn — cùng nhánh, CHƯA MERGE (`docs/83`)
+
+Chủ dự án chốt (31/10): TikFlash cho **cả** shop bán lẻ online **và** quán ăn giao đi, shop chọn
+ngành lúc đăng ký; một cửa hàng thời trang làm mẫu **bố cục** cho bán lẻ (không chép thương hiệu).
+Chọn làm bán lẻ trước; quán ăn sẽ là ngành riêng "Quán ăn / Giao đồ ăn" với cửa hàng kiểu thực
+đơn, còn "Thực phẩm / Đồ uống" giữ cho tạp hoá.
+
+Đã làm, không đụng tiền/giá/phí ship: điện thoại thấy hàng ở màn đầu (thẻ đầu tiên y 1146–1201 →
+684 trên trang chủ, 1021–1042 → 329 ở `/products`) · nhãn "-N%" và "Bán chạy" (≥50 đã bán THẬT) ·
+**bỏ mọi câu hứa thay shop** khỏi 5 mẫu (thanh trên đầu, cam kết, menu giả) — cam kết mặc định chỉ
+còn bốn điều nền tảng bảo đảm được, admin và storefront so BẰNG · giỏ/thanh toán cùng giọng với
+cửa hàng, giỏ đổi số lượng bằng −/+ (một form, nút mang **số lượng đích** nên bấm lặp không cộng
+dồn, chạy không cần JS). Shop đang chạy giữ giao diện đã lưu tới khi bấm "Áp mẫu".
+
+Kiểm chứng: `apps/storefront/test/ban-le.test.js` 13/13 (manifest unit 44 → 45) · 17/17 đột biến
+đỏ · 30/30 phép đo tràn ngang (5 trang × 320/360/390 × JS bật/tắt) · ảnh 5 mẫu trước/sau, đã nhìn.
+Hai lỗi có từ trước tìm ra bằng probe và đã vá: trang SP cuộn ngang 31px ở 320px, ô chọn ảnh của
+form đánh giá rộng nội tại 378px. Còn nợ: chân trang luôn ghi "Chuyển khoản QR" kể cả shop chưa
+bật QR; `scripts/probe-360.mjs` báo đỏ giả cho ô `.hp`/checkbox 1px trên cửa hàng và đường dẫn
+Chromium mặc định đã cũ (đặt `PROBE_CHROME`).
 
 ### 9.4 Bắt đầu một phiên mới thế nào
 

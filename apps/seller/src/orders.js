@@ -379,7 +379,7 @@ async function getOrder(res, ctx, _b, params) {
       `SELECT o.id, o.order_number, o.status, o.payment_status, o.payment_method, o.fulfillment_status,
               o.subtotal_vnd, o.shipping_vnd, o.total_vnd, o.fulfillment_adjustment_vnd,
               ${OWED_PAID_SQL} AS amount_paid_vnd,
-              o.customer_name, o.customer_phone, o.customer_email, o.shipping_address, o.note, o.created_at,
+              o.customer_name, o.customer_phone, o.customer_email, o.shipping_address, o.note, o.customer_note, o.created_at,
               o.paid_at, o.shipped_at, o.delivered_at, o.cancelled_at, o.cancel_reason, o.source, o.source_ref, o.return_fee_vnd,
               o.sync_status, o.sync_error, o.external_ref, o.external_branch_ref, o.sync_updated_at,
               ${OWED_REFUNDED_SQL} AS refunded_vnd, ${OWED_SQL} AS owed_vnd, ${OWED_REASON_SQL} AS owed_reason
@@ -1631,7 +1631,10 @@ export async function createOrderCore(ctx, body, tenantClient = null) {
     }
     await c.query(
       `INSERT INTO outbox (shop_id, topic, payload) VALUES (current_shop_id(), 'order.created', $1)`,
-      [{ ...(email ? { to: email } : {}), order_id: order.id, order_number: Number(num), total_vnd: total, customer_name: name, payment_method: paymentMethod, source, ...(link ? { link } : {}) }],
+      // `items` (0187): tin Telegram "đơn mới" kèm danh sách món — cùng hình dạng với checkout
+      // ({title, qty}, tối đa 50 dòng) để đơn bot/đơn tay cũng báo bếp làm món gì.
+      [{ ...(email ? { to: email } : {}), order_id: order.id, order_number: Number(num), total_vnd: total, customer_name: name, payment_method: paymentMethod, source, ...(link ? { link } : {}),
+        items: lines.slice(0, 50).map((l) => ({ title: [...String(l.title)].slice(0, 200).join(''), qty: Number(l.qty) })) }],
     );
     // AI làm, chứ không phải đơn ĐẾN TỪ ĐÂU. Hai câu hỏi khác nhau và trước 0186 chúng bị
     // gộp làm một vì mọi đơn có `apiKeyId` đều do máy tạo. Đường chốt "đơn chờ tạo" phá giả

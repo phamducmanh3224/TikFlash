@@ -124,7 +124,13 @@ async function getShop(res, ctx) {
               ship_fee_far_vnd, ship_extra_per_500g_vnd, default_weight_gram, ship_from_province,
               ship_mode, ship_origin_lat, ship_origin_lng, ship_base_vnd, ship_per_km_vnd,
               ship_max_km, ship_road_factor, ship_over_max_behavior,
-              max_pending_per_ip, max_pending_per_phone, pii_retention_months, logo_key, require_mfa
+              max_pending_per_ip, max_pending_per_phone, pii_retention_months, logo_key, require_mfa,
+              orders_paused, orders_pause_note,
+              to_char(order_open_time, 'HH24:MI') AS order_open_time,
+              to_char(order_close_time, 'HH24:MI') AS order_close_time,
+              -- Trạng thái NGAY LÚC NÀY theo đúng hàm checkout dùng để chặn (0187) — trang Cài
+              -- đặt nói "khách đang đặt được / không" bằng chính câu trả lời của cổng thật.
+              (NOT orders_paused AND shop_order_window_open(order_open_time, order_close_time, now())) AS accepting_orders_now
          FROM shops WHERE id = $1`,
       [ctx.shopId],
     );
@@ -236,7 +242,10 @@ const SETTINGS_SELECT = `
          ship_mode, ship_origin_lat, ship_origin_lng, ship_base_vnd,
          ship_per_km_vnd, ship_max_km, ship_road_factor, ship_over_max_behavior,
          low_stock_threshold, max_pending_per_ip, max_pending_per_phone,
-         pii_retention_months
+         pii_retention_months,
+         orders_paused, orders_pause_note,
+         to_char(order_open_time, 'HH24:MI') AS order_open_time,
+         to_char(order_close_time, 'HH24:MI') AS order_close_time
     FROM shops
    WHERE id = current_shop_id()
    FOR UPDATE`;
@@ -397,6 +406,46 @@ function validateOperationsSection(body, current) {
   return { values: { lowStock: lowStock.value, maxIp: maxIp.value, maxPhone: maxPhone.value } };
 }
 
+// GIỜ NHẬN ĐƠN + TẠM NGHỈ (0187). Cùng khuôn các nhóm khác: khoá vắng mặt giữ giá trị cũ,
+// lỗi nêu đích danh ô sai. Mirror CHECK shops_order_hours_pair bằng câu tiếng Việt thay vì để
+// DB nổ 23514 thành trang 500.
+const GIO_RE = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/;
+function validateHoursSection(body, current) {
+  const pausedRaw = sectionValue(body, current, 'orders_paused');
+  // Ô tích của form: tích → 'on', bỏ tích → khoá rỗng. JSON gửi boolean.
+  let paused;
+  if (pausedRaw === true || ['1', 'on', 'true'].includes(String(pausedRaw ?? '').trim())) paused = true;
+  else if (pausedRaw === false || pausedRaw == null || ['', '0', 'off', 'false'].includes(String(pausedRaw).trim())) paused = false;
+  else return { problem: settingProblem('invalid_orders_paused', 'Trạng thái tạm nghỉ không hợp lệ.', 'orders_paused') };
+
+  const note = String(sectionValue(body, current, 'orders_pause_note') ?? '').replace(/[\r\n]+/g, ' ').trim();
+  if ([...note].length > 200) {
+    return { problem: settingProblem('orders_pause_note_too_long', 'Lời nhắn khi tạm nghỉ không được dài quá 200 ký tự.', 'orders_pause_note') };
+  }
+
+  const gio = (key, label) => {
+    const t = String(sectionValue(body, current, key) ?? '').trim();
+    if (t === '') return { value: null };
+    const m = GIO_RE.exec(t);
+    if (!m) return { problem: settingProblem(`invalid_${key}`, `${label} không hợp lệ — nhập dạng giờ:phút, ví dụ 10:00.`, key) };
+    return { value: `${m[1]}:${m[2]}` };
+  };
+  const open = gio('order_open_time', 'Giờ bắt đầu nhận đơn');
+  if (open.problem) return open;
+  const close = gio('order_close_time', 'Giờ ngừng nhận đơn');
+  if (close.problem) return close;
+  if ((open.value == null) !== (close.value == null)) {
+    const thieu = open.value == null ? 'order_open_time' : 'order_close_time';
+    return { problem: settingProblem('order_hours_incomplete', 'Cần nhập cả giờ bắt đầu và giờ ngừng nhận đơn.', thieu,
+      'Muốn nhận đơn cả ngày thì để trống cả hai ô.') };
+  }
+  if (open.value != null && open.value === close.value) {
+    return { problem: settingProblem('order_hours_equal', 'Giờ bắt đầu và giờ ngừng nhận đơn không được trùng nhau.', 'order_close_time',
+      'Muốn nhận đơn cả ngày thì để trống cả hai ô.') };
+  }
+  return { values: { paused, note: note || null, open: open.value, close: close.value } };
+}
+
 function validatePrivacySection(body, current) {
   const parsed = parseSettingInt(sectionValue(body, current, 'pii_retention_months'));
   if (parsed.error || (parsed.value != null && (parsed.value < 6 || parsed.value > 120))) {
@@ -433,6 +482,7 @@ async function updateShopSettingsSection(res, ctx, body, section) {
     if (section === 'profile') checked = validateProfileSection(body, current);
     else if (section === 'shipping') checked = validateShippingSection(body, current);
     else if (section === 'operations') checked = validateOperationsSection(body, current);
+    else if (section === 'hours') checked = validateHoursSection(body, current);
     else checked = validatePrivacySection(body, current);
     if (checked.problem) return { code: 400, problem: checked.problem };
 
@@ -465,6 +515,13 @@ async function updateShopSettingsSection(res, ctx, body, section) {
           WHERE id = current_shop_id()`,
         [v.lowStock, v.maxIp, v.maxPhone],
       );
+    } else if (section === 'hours') {
+      await c.query(
+        `UPDATE shops
+            SET orders_paused = $1, orders_pause_note = $2, order_open_time = $3, order_close_time = $4
+          WHERE id = current_shop_id()`,
+        [v.paused, v.note, v.open, v.close],
+      );
     } else {
       await c.query(
         `UPDATE shops SET pii_retention_months = $1 WHERE id = current_shop_id()`,
@@ -475,7 +532,11 @@ async function updateShopSettingsSection(res, ctx, body, section) {
     await audit(c, `shop.settings_${section}_updated`, {
       actorId: ctx.user.id,
       ip: ctx.ip,
-      metadata: { section },
+      // Tạm nghỉ/mở lại là sự kiện khách CẢM THẤY được ("sao tối qua không đặt được?") — ghi
+      // trạng thái mới vào nhật ký để trả lời được câu đó mà không phải đoán.
+      metadata: section === 'hours'
+        ? { section, orders_paused: v.paused, order_open_time: v.open, order_close_time: v.close }
+        : { section },
     });
     return { code: 200 };
   });
@@ -638,6 +699,7 @@ const ROUTES = [
   { m: 'PATCH', re: new RegExp(`^/shops/${UUID}/settings/shipping$`), perm: 'shop.write', fn: (res, ctx, b) => updateShopSettingsSection(res, ctx, b, 'shipping') },
   { m: 'PATCH', re: new RegExp(`^/shops/${UUID}/settings/operations$`), perm: 'shop.write', fn: (res, ctx, b) => updateShopSettingsSection(res, ctx, b, 'operations') },
   { m: 'PATCH', re: new RegExp(`^/shops/${UUID}/settings/privacy$`), perm: 'shop.write', fn: (res, ctx, b) => updateShopSettingsSection(res, ctx, b, 'privacy') },
+  { m: 'PATCH', re: new RegExp(`^/shops/${UUID}/settings/hours$`), perm: 'shop.write', fn: (res, ctx, b) => updateShopSettingsSection(res, ctx, b, 'hours') },
   { m: 'PATCH', re: new RegExp(`^/shops/${UUID}/require-mfa$`), perm: 'shop.write', fn: (res, ctx, b) => setRequireMfa(res, ctx, b) },
   ...READINESS_ROUTES,
   { m: 'GET', re: new RegExp(`^/shops/${UUID}/members$`), perm: 'members.read', fn: (res, ctx) => listMembers(res, ctx) },
