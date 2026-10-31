@@ -1,9 +1,29 @@
 ---
 name: ui-ux-pro-max
-description: "UI/UX design intelligence for web, mobile, and desktop. This skill should be used when designing, building, reviewing, or fixing interfaces, including pages, components, design systems, accessibility, interaction, responsive layout, typography, color, charts, and stack-specific UI implementation. Searchable local data: 79 searchable styles (50 active), 192 product palettes and reasoning profiles, 74 font pairings, 119 UX guidelines, 105 icons, 17 GSAP presets, 25 chart types, and 22 stacks."
+description: "Trong kho TikFlash, luật CLAUDE.md §3 và docs/44, docs/72 thắng mọi gợi ý của skill: không CDN, không font ngoài, không JS ở storefront/checkout. UI/UX design intelligence for web, mobile, and desktop. This skill should be used when designing, building, reviewing, or fixing interfaces, including pages, components, design systems, accessibility, interaction, responsive layout, typography, color, charts, and stack-specific UI implementation. Searchable local data: 79 searchable styles (50 active), 192 product palettes and reasoning profiles, 74 font pairings, 119 UX guidelines, 105 icons, 17 GSAP presets, 25 chart types, and 22 stacks."
 ---
 
 # UI/UX Pro Max - Design Intelligence
+
+> ## ⚠️ Đọc trước khi dùng trong kho này (bản sửa của TikFlash)
+>
+> Skill này là kho GỢI Ý, không phải luật. Khi gợi ý của nó trái với kho, **kho thắng**:
+>
+> - **Không CDN, không font ngoài, không thư viện JS ngoài** (CLAUDE.md §3, CSP nghiêm ngặt).
+>   Bỏ qua mọi gợi ý Google Fonts, Tailwind CDN (`html-tailwind`), GSAP (`--motion`, `--domain gsap`).
+>   Dùng chúng để lấy Ý TƯỞNG, rồi tự viết bằng CSS thuần đã có trong kho.
+> - **Storefront và checkout mặc định KHÔNG JavaScript** (ADR-008, form + Post-Redirect-Get).
+>   JS hẹp có `nonce` chỉ ở seller-admin và vài chỗ đã duyệt (ADR-011). Đường tiền giữ khoá cứng.
+> - **Hệ thiết kế của kho đã có sẵn:** `docs/44` (bảng điều khiển người bán) và `docs/72` (cửa
+>   hàng công khai) — ngân sách token, thang chữ, nhịp 4px. Đó là nguồn duy nhất. **Không** dùng
+>   `--design-system` để chọn bảng màu/font mới, và **không bao giờ** dùng `--persist` trong kho
+>   này (nó tạo `design-system/<slug>/MASTER.md` tự xưng "Global Source of Truth", đá với docs/).
+> - Stack của kho: Node 22, HTML nối chuỗi bằng template literal, không framework. Không có stack
+>   nào trong danh sách khớp hẳn; `html-tailwind` chỉ dùng để tham khảo bố cục, bỏ phần Tailwind.
+> - `Asia/Ho_Chi_Minh`, dùng được ở 360px, đi được bằng bàn phím, đường không-JS — xem CLAUDE.md §9.2.
+>
+> Phần dưới đây giữ nguyên tiếng Anh của bản gốc để cập nhật từ upstream không phải dịch lại
+> (xem `UPSTREAM.md`).
 
 Searchable local UI/UX guidance: 79 searchable styles (50 active), 192 product palettes and exact reasoning profiles, 74 font pairings, 119 UX guidelines, 105 curated icons, 17 GSAP presets, 25 chart types, and 22 technology stacks.
 
@@ -36,13 +56,13 @@ For the full rule list per category (all 119 UX guidelines with rationale), read
 
 ## Running the search tool
 
-The search script lives inside this skill's own directory, not the project directory. Always invoke it by its full path — do not assume a particular working directory:
+The search script lives inside this skill's own directory, not the project directory. The commands below resolve the repo root with `git rev-parse --show-toplevel`, so they work from any subdirectory:
 
 ```bash
-python .claude/skills/ui-ux-pro-max/scripts/search.py "<query>" --domain <domain>
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "<query>" --domain <domain>
 ```
 
-If `python` is not found, try `python3`, then `py -3`. Requires Python 3.x, no external dependencies (see README for install instructions if Python is missing).
+If `python` is not found, try `python3`, then `py -3`. Requires Python 3.x, no external dependencies. If Python is missing entirely, install Python 3 from python.org (on Windows, tick "Add python.exe to PATH") — the skill has no README of its own.
 
 ## Workflow
 
@@ -50,7 +70,7 @@ If `python` is not found, try `python3`, then `py -3`. Requires Python 3.x, no e
 
 Choose the smallest search mode that fits the request:
 
-1. **New project/page or system-wide visual direction** → use `--design-system`.
+1. **New project/page or system-wide visual direction** → use `--design-system`. *(TikFlash: not for this repo's pages — the design system is docs/44 and docs/72.)*
 2. **Targeted concern or component bug** → use one explicit `--domain`.
 3. **Known implementation stack** → use `--stack`; add a separate domain search only for a distinct design concern.
 
@@ -70,27 +90,29 @@ Extract from the user request:
 - **Style keywords**: playful, vibrant, minimal, dark mode, content-first, immersive, etc.
 - **Stack**: detect from the project — check `package.json` deps (react/next/vue/svelte/nuxt/@angular), `pubspec.yaml` (Flutter), `*.xcodeproj`/`Package.swift` (SwiftUI), `composer.json` (Laravel), or React Native markers (`app.json` + `react-native` dep). If nothing is detectable and stack guidance matters, ask the user. **Never assume a stack** — a hardcoded default silently misroutes every recommendation.
 
-### Step 2: Generate Design System (REQUIRED for new pages/projects)
+### Step 2: Generate Design System (optional — NOT used for TikFlash pages, see the warning at the top)
 
 Use `--design-system` when the task needs a coherent product-wide visual direction:
 
 ```bash
-python .claude/skills/ui-ux-pro-max/scripts/search.py "<product_type> <industry> <keywords>" --design-system [-p "Project Name"]
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "<product_type> <industry> <keywords>" --design-system [-p "Project Name"]
 ```
 
 This aggregates product/style/color/landing/typography matches, applies reasoning rules from `ui-reasoning.csv`, and returns pattern, style, colors, typography, effects, and anti-patterns to avoid.
 
 **Example:**
 ```bash
-python .claude/skills/ui-ux-pro-max/scripts/search.py "beauty spa wellness service" --design-system -p "Serenity Spa"
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "beauty spa wellness service" --design-system -p "Serenity Spa"
 ```
 
 ### Step 2b: Persist Design System (Master + Overrides Pattern)
 
+> **TikFlash: never run `--persist` in this repo.** The repo's design source of truth is docs/44 and docs/72; a `design-system/` folder would compete with it.
+
 To save the design system for retrieval across sessions, add `--persist` **and always pass `--output-dir` pointed at the project root** — without it, files are written relative to whatever directory the tool happens to run from:
 
 ```bash
-python .claude/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Project Name" --output-dir "<project-root>"
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "<query>" --design-system --persist -p "Project Name" --output-dir "<project-root>"
 ```
 
 This creates:
@@ -113,7 +135,7 @@ Read an existing `MASTER.md` before deciding whether `--force` is justified. Nev
 Three optional 1-10 sliders that tune `--design-system` output without changing your query. Add any combination of them to the same command:
 
 ```bash
-python .claude/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --variance <1-10> --motion <1-10> --density <1-10>
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "<query>" --design-system --variance <1-10> --motion <1-10> --density <1-10>
 ```
 
 | Dial | Low (1-3) | Mid (4-7) | High (8-10) |
@@ -128,13 +150,13 @@ python .claude/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system 
 
 **Example:**
 ```bash
-python .claude/skills/ui-ux-pro-max/scripts/search.py "internal analytics dashboard" --design-system --variance 8 --motion 7 --density 8 -p "Ops Console"
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "internal analytics dashboard" --design-system --variance 8 --motion 7 --density 8 -p "Ops Console"
 ```
 
 ### Step 3: Supplement with Detailed Searches (as needed)
 
 ```bash
-python .claude/skills/ui-ux-pro-max/scripts/search.py "<keyword>" --domain <domain> [-n <max_results>]
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "<keyword>" --domain <domain> [-n <max_results>]
 ```
 
 | Need | Domain | Example |
@@ -157,7 +179,7 @@ Domain is auto-detected from the query if `--domain` is omitted — but auto-det
 ### Step 4: Stack Guidelines
 
 ```bash
-python .claude/skills/ui-ux-pro-max/scripts/search.py "<keyword>" --stack <stack>
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "<keyword>" --stack <stack>
 ```
 
 **Available stacks:** `react`, `nextjs`, `vue`, `svelte`, `astro`, `nuxtjs`, `nuxt-ui`, `angular`, `laravel`, `swiftui`, `react-native`, `flutter`, `jetpack-compose`, `html-tailwind`, `shadcn`, `threejs`, `javafx`, `wpf`, `winui`, `avalonia`, `uno`, `uwp`. Use the stack detected in Step 1.
@@ -177,13 +199,13 @@ Do not fabricate output. Instead:
 
 ```bash
 # Step 2: design system
-python .claude/skills/ui-ux-pro-max/scripts/search.py "AI search tool modern minimal" --design-system -p "AI Search"
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "AI search tool modern minimal" --design-system -p "AI Search"
 
 # Step 3: supplement
-python .claude/skills/ui-ux-pro-max/scripts/search.py "keyboard focus modal" --domain ux
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "keyboard focus modal" --domain ux
 
 # Step 4: stack guidelines
-python .claude/skills/ui-ux-pro-max/scripts/search.py "suspense streaming bundle" --stack nextjs
+python3 "$(git rev-parse --show-toplevel)/.claude/skills/ui-ux-pro-max/scripts/search.py" "suspense streaming bundle" --stack nextjs
 ```
 
 Then synthesize the design system + detailed searches and implement.
@@ -196,7 +218,7 @@ Then synthesize the design system + detailed searches and implement.
 
 - Keep one dominant intent and 2–5 meaningful terms per query: `"keyboard focus modal"`, not a full audit checklist
 - Retry once with a narrower phrase or explicit domain/stack; do not cycle through unrelated keywords
-- Use `--design-system` for a new project/page and `--domain` for a focused concern
+- Use `--domain` for a focused concern; in this repo skip `--design-system` (see the warning at the top)
 - Pass the detected stack explicitly for implementation-specific guidance
 
 | Problem | What to Do |

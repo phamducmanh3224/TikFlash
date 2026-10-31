@@ -23,3 +23,8 @@ tmp/
 # Bản chụp shop dev (scripts/shop-snapshot.sh) — vài MB ảnh nhị phân, và là
 # trạng thái CỦA MÁY NÀY chứ không phải mã nguồn.
 dev-snapshots/
+
+# Skill ui-ux-pro-max: `--persist` tạo design-system/<slug>/MASTER.md. Kho này cấm dùng
+# --persist (hệ thiết kế nằm ở docs/44, docs/72); bỏ qua để lỡ chạy thì không vào commit.
+/design-system/
+__pycache__/
