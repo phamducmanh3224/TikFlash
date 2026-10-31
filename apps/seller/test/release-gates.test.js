@@ -52,6 +52,65 @@ test('dependency scan đọc JSON theo số và fail-closed khi audit không ch�
   assert.equal(invalidJson.status, 1, 'JSON hỏng không được coi là sạch');
   assert.match(invalidJson.stdout, /FLAG.*KHÔNG CHẠY ĐƯỢC/);
 
+  // Ngoại lệ advisory: hình dạng lấy đúng từ `npm audit --json` của apps/seller ngày 31/10 —
+  // advisory gốc nằm trong `via` dạng object, gói kéo nó vào chỉ mang `via` dạng chuỗi.
+  const advisory = (id, severity = 'high') => ({ severity, url: `https://github.com/advisories/${id}` });
+  const chain = (...roots) => JSON.stringify({
+    auditReportVersion: 2,
+    vulnerabilities: {
+      'decode-uri-component': { severity: 'high', via: roots },
+      'query-string': { severity: 'high', via: ['decode-uri-component'] },
+      minio: { severity: 'high', via: ['query-string', 'stream-json'] },
+      'stream-json': { severity: 'moderate', via: [advisory('GHSA-528h-pc64-c93x', 'moderate')] },
+    },
+    metadata: { vulnerabilities: { info: 0, low: 0, moderate: 1, high: 3, critical: 0, total: 4 } },
+  });
+  const waiverRun = (input, env) => spawnSync(
+    bash,
+    ['scripts/security-scan.sh', '--classify-audit-json', 'fixture', '1'],
+    { cwd: root, input, encoding: 'utf8', env: { ...process.env, ...env } },
+  );
+  const W = 'GHSA-aaaa-bbbb-cccc';
+  const before = String(Date.parse('2026-11-30T23:59:00+07:00'));
+  const after = String(Date.parse('2026-12-01T00:00:00+07:00'));
+
+  const waived = waiverRun(chain(advisory(W)), { AUDIT_WAIVERS_TEST: `${W}@2026-11-30`, AUDIT_NOW_MS_TEST: before });
+  assert.equal(waived.status, 0, waived.stdout);
+  assert.match(waived.stdout, /WARN.*3 high.*GHSA-aaaa-bbbb-cccc@2026-11-30/,
+    'high thuộc ngoại lệ còn hạn phải qua cổng nhưng vẫn HIỆN RA, không im lặng thành OK');
+
+  const extra = waiverRun(chain(advisory(W), advisory('GHSA-dddd-eeee-ffff')),
+    { AUDIT_WAIVERS_TEST: `${W}@2026-11-30`, AUDIT_NOW_MS_TEST: before });
+  assert.equal(extra.status, 1, 'advisory high MỚI trên cùng gói đã miễn vẫn phải đỏ');
+  assert.match(extra.stdout, /chưa miễn: GHSA-dddd-eeee-ffff/);
+
+  const expired = waiverRun(chain(advisory(W)), { AUDIT_WAIVERS_TEST: `${W}@2026-11-30`, AUDIT_NOW_MS_TEST: after });
+  assert.equal(expired.status, 1, 'ngoại lệ hết hạn phải tự đỏ lại');
+  assert.match(expired.stdout, /HẾT HẠN.*GHSA-aaaa-bbbb-cccc@2026-11-30/);
+
+  const none = waiverRun(chain(advisory(W)), { AUDIT_WAIVERS_TEST: '', AUDIT_NOW_MS_TEST: before });
+  assert.equal(none.status, 1, 'danh sách ngoại lệ rỗng thì high phải đỏ');
+
+  const brokenRun = spawnSync(bash, ['scripts/security-scan.sh', '--classify-audit-json', 'fixture', '17'], {
+    cwd: root, input: chain(advisory(W)), encoding: 'utf8',
+    env: { ...process.env, AUDIT_WAIVERS_TEST: `${W}@2026-11-30`, AUDIT_NOW_MS_TEST: before },
+  });
+  assert.equal(brokenRun.status, 1, 'npm audit trả mã lạ thì không được miễn dù advisory có trong danh sách');
+
+  // Lượt quét thật không được đọc ngoại lệ từ môi trường: chỉ mode classify nhận biến *_TEST.
+  const scanFn = source.slice(source.indexOf('scan_dependency_package() {'), source.indexOf('case "${1:-}" in'));
+  assert.match(scanFn, /classify_dependency_audit "\$dir" "\$audit_rc" "\$out"\n/,
+    'scan thật phải gọi classify KHÔNG kèm ngoại lệ/giờ tuỳ chỉnh');
+  assert.doesNotMatch(scanFn, /_TEST/);
+  const waiverLine = /^AUDIT_WAIVERS="([^"]*)"$/m.exec(source);
+  assert.ok(waiverLine, 'mốc chết: không thấy hằng AUDIT_WAIVERS');
+  for (const waiver of waiverLine[1].split(/\s+/).filter(Boolean)) {
+    const [id, day] = waiver.split('@');
+    assert.match(id, /^GHSA(-[0-9a-z]{4}){3}$/, `ngoại lệ phải khoá theo mã GHSA: ${waiver}`);
+    assert.match(source, new RegExp(`^# ${id} `, 'm'), `ngoại lệ ${id} phải có đoạn lý do ngay trên AUDIT_WAIVERS`);
+    assert.ok(Number.isFinite(Date.parse(`${day}T23:59:59+07:00`)), `ngoại lệ ${id} thiếu ngày hết hạn hợp lệ`);
+  }
+
   assert.match(source, /npm audit --omit=dev --audit-level=high --json/);
   assert.match(source, /metadata\?\.vulnerabilities/);
   assert.doesNotMatch(source, /found 0 vulnerabilities|found \[0-9\]/,
