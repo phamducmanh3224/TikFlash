@@ -30,6 +30,7 @@ import { isProvince, regionOf } from './provinces.js';
 import { haversineKm, inVietnam } from './geo.js';
 import { reverseGeocode, normalizeProvince, GEOCODE_ON } from './geocode.js';
 import { readMultipartAll, ingestReviewImages, MAX_IMAGES } from './review-images.js';
+import { parseCustomerNote, outboxItems, closedMessage } from './do-an.js';
 // Bộ đếm rate-limit DÙNG CHUNG với auth (atomic Lua, FAIL-OPEN khi Redis lỗi). File
 // gắn vào /app/ratelimit.js qua bind-mount trong compose.dev.yml (không copy, không sửa).
 import { hit } from '../ratelimit.js';
@@ -820,8 +821,23 @@ function parseOrderInput(raw) {
   // Server cắt theo trần + số dư dưới khoá; đây chỉ nhận số nguyên ≥0 (bỏ rác).
   const pointsRedeem = raw.points_redeem != null && raw.points_redeem !== '' && Number.isFinite(Number(raw.points_redeem))
     ? Math.max(0, Math.trunc(Number(raw.points_redeem))) : null;
-  return { name, phone: phoneCanon, email, address, paymentMethod, pointsRedeem }; // phone đã chuẩn hoá → trần theo-SĐT luôn khớp
+  return { name, phone: phoneCanon, email, address, paymentMethod, pointsRedeem, customerNote: parseCustomerNote(raw.customer_note) }; // phone đã chuẩn hoá → trần theo-SĐT luôn khớp
 }
+
+// GIỜ NHẬN ĐƠN (0187). Đọc dưới CÙNG transaction với nơi hỏi — lúc chốt đơn thì đó là
+// transaction đặt hàng, nên không có khe "đọc lúc còn mở, ghi lúc đã đóng" ngoài vài mili-giây.
+// Câu "bây giờ có trong giờ không" do hàm DB `shop_order_window_open` trả lời (giờ VN cố định);
+// storefront hỏi đúng hàm đó cho dải thông báo — một định nghĩa, hai nơi đọc.
+async function orderWindow(c) {
+  const r = (await c.query(
+    `SELECT orders_paused, orders_pause_note,
+            to_char(order_open_time, 'HH24:MI') AS open_at, to_char(order_close_time, 'HH24:MI') AS close_at,
+            shop_order_window_open(order_open_time, order_close_time, now()) AS in_hours
+       FROM shops WHERE id = current_shop_id()`)).rows[0] ?? {};
+  const paused = r.orders_paused === true;
+  return { open: !paused && r.in_hours !== false, paused, note: r.orders_pause_note ?? null, openAt: r.open_at ?? null, closeAt: r.close_at ?? null };
+}
+
 
 /**
  * Đếm số lần VÙNG ĐỆM chặn một đơn (0140) — chạy SAU khi transaction đặt đơn đã kết thúc.
@@ -854,7 +870,10 @@ async function createOrderTx(c, ctx, token, idemKey, f) {
   {
     // request_hash: nội dung ĐƠN, KHÔNG gồm bất kỳ giá/total nào client gửi. GỒM pointsRedeem
     // (input khách chọn như payment_method) → retry cùng key khác số điểm → 422, không double-spend.
-    const requestHash = sha256(idemKey + JSON.stringify({ name, phone, email, address, paymentMethod, pointsRedeem: f.pointsRedeem ?? null }));
+    // Lời dặn (0187) là nội dung đơn → vào hash. CHỈ khi có: đơn không lời dặn giữ nguyên hash
+    // cũ, nên một khoá idempotency đang bay qua lúc nâng cấp không bỗng thành "nội dung khác".
+    const requestHash = sha256(idemKey + JSON.stringify({ name, phone, email, address, paymentMethod, pointsRedeem: f.pointsRedeem ?? null,
+      ...(f.customerNote ? { customerNote: f.customerNote } : {}) }));
     // Idempotency: giành key.
     const claim = await c.query(
       `INSERT INTO idempotency_keys (shop_id, key, request_hash, status)
@@ -888,6 +907,13 @@ async function createOrderTx(c, ctx, token, idemKey, f) {
     if (policy.cod_only && paymentMethod !== 'cod') {
       fail(400, 'Kết nối KiotViet pilot hiện chỉ nhận COD; thanh toán trước sẽ mở sau khi API tiền được xác minh.', { qr_unavailable: true });
     }
+    // GIỜ NHẬN ĐƠN / TẠM NGHỈ (0187). Chặn ở ĐÂY — trước khi khoá giỏ và giữ chỗ tồn — chứ
+    // không chỉ ở giao diện: nút bị ẩn không ngăn được form cũ còn mở trong tab từ trước giờ
+    // đóng, hay một lời gọi API thẳng. Đứng SAU nhánh replay idempotency ở trên là cố ý: khách
+    // bấm Đặt hàng lúc 20:59:59, mạng chập, trình duyệt gửi lại lúc 21:00:01 thì phải nhận lại
+    // ĐÚNG đơn đã tạo, không phải câu "quán đã đóng" cho một đơn đang tồn tại.
+    const gio = await orderWindow(c);
+    if (!gio.open) fail(409, closedMessage(gio), { shop_closed: true });
 
     const cart = await findCart(c, token, { forUpdate: true });
     if (!cart) fail(400, 'giỏ hàng trống hoặc hết hạn');
@@ -1099,14 +1125,14 @@ async function createOrderTx(c, ctx, token, idemKey, f) {
       `INSERT INTO orders (shop_id, order_number, status, payment_status, payment_method,
          customer_name, customer_phone, customer_email, shipping_address,
          subtotal_vnd, shipping_vnd, discount_vnd, total_vnd, lookup_token_hash, payment_ref, qr_account, coupon_code, client_ip_hash, customer_id,
-         points_redeemed, points_discount_vnd,
+         points_redeemed, points_discount_vnd, customer_note,
          -- Nguồn đơn (0119): đơn qua trang thanh toán LUÔN là 'web'. Ghi ngay tại đây
          -- chứ không suy ra sau, vì "suy ra" nghĩa là mỗi chỗ đọc lại đoán một kiểu.
          source, integration_id, integration_generation, external_branch_ref, sync_status, sync_updated_at)
-       VALUES (current_shop_id(), $1, 'pending', 'unpaid', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'web', $19, $20, $21, $22, now()) RETURNING id`,
+       VALUES (current_shop_id(), $1, 'pending', 'unpaid', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $23, 'web', $19, $20, $21, $22, now()) RETURNING id`,
       [num, paymentMethod, name, phoneCanon ?? phone, email, address, subtotal, shipping, discount, total, hashToken(lookupToken), paymentRef, qrAccount, couponCode, ipHash, ctx.customerId ?? null, pointsRedeemed, pointsDiscount,
         integration?.id ?? null, integration ? Number(integration.generation) : null,
-        integration?.external_branch_ref ?? null, integration ? 'pending' : 'not_required'],
+        integration?.external_branch_ref ?? null, integration ? 'pending' : 'not_required', f.customerNote ?? null],
     )).rows[0];
     // Sổ điểm ĐỔI (0086): ghi SAU khi có order.id → UNIQUE loyalty_ledger_redeem_once(shop,order)
     // = đúng 1 dòng/đơn. Số dư đã trừ ở trên (cùng tx, khoá FOR UPDATE) → nguyên tử. Nếu tx
@@ -1177,7 +1203,12 @@ async function createOrderTx(c, ctx, token, idemKey, f) {
       const link = (email && ctx.host) ? `https://${ctx.host}/checkout/success?number=${Number(num)}&token=${lookupToken}` : undefined;
       await c.query(
         `INSERT INTO outbox (shop_id, topic, payload) VALUES (current_shop_id(), 'order.created', $1)`,
-        [{ order_id: order.id, ...(email ? { to: email } : {}), order_number: Number(num), total_vnd: total, customer_name: name, payment_method: paymentMethod, ...(link ? { link } : {}) }],
+        // `items` + `customer_note` (0187): tin Telegram "đơn mới" của chủ shop trước đây chỉ có số
+        // đơn và tổng tiền — bếp phải mở trang quản trị mới biết làm MÓN GÌ. Payload outbox phải
+        // tự đủ (worker không đọc orders/order_lines), nên món đi kèm ở đây. customer_note là
+        // chữ khách gõ ⇒ coi như PII: sweepOutboxGc gỡ nó cùng `to`/`customer_name`.
+        [{ order_id: order.id, ...(email ? { to: email } : {}), order_number: Number(num), total_vnd: total, customer_name: name, payment_method: paymentMethod, ...(link ? { link } : {}),
+          items: outboxItems(lines), ...(f.customerNote ? { customer_note: f.customerNote } : {}) }],
       );
     }
 
@@ -1265,7 +1296,7 @@ async function geocode(req, res, body, ctx) {
 async function checkout(req, res, body, ctx) {
   const idemKey = req.headers['idempotency-key'];
   if (typeof idemKey !== 'string' || idemKey.length < 8 || idemKey.length > 200) return send(res, 400, { error: 'thiếu/không hợp lệ Idempotency-Key' });
-  const f = parseOrderInput({ name: body.customer?.name, phone: body.customer?.phone, email: body.customer?.email, address: body.address, payment_method: body.payment_method, points_redeem: body.points_redeem });
+  const f = parseOrderInput({ name: body.customer?.name, phone: body.customer?.phone, email: body.customer?.email, address: body.address, payment_method: body.payment_method, points_redeem: body.points_redeem, customer_note: body.customer_note });
   if (f.error) return send(res, 400, { error: f.error });
   const token = parseCookies(req)[CART_COOKIE];
   const cust = await resolveCustomer(ctx.shopId, req);
@@ -1290,18 +1321,20 @@ async function checkoutPlace(req, res, form, ctx) {
   // Sinh idem MỚI ở đây và ràng buộc challenge vào chính idem đó (chống replay).
   const reRender = async ({ needChallenge, ...opts }) => {
     const token = parseCookies(req)[bn ? BUYNOW_COOKIE : CART_COOKIE];
-    const { summary, qrEnabled } = await withTenant(ctx.shopId, async (c) => {
+    const { summary, qrEnabled, gio } = await withTenant(ctx.shopId, async (c) => {
       const cart = await findCart(c, token);
       if (!cart) return { summary: { items: [] }, qrEnabled: false };
       // Tỉnh đã chọn hợp lệ → tổng dựng lại TÍNH THEO TỈNH (ship_seen mới = phí đúng → vòng
       // xác nhận phí hội tụ sau đúng một cú bấm). Toạ độ (nếu có) → ship theo km khớp lúc chốt.
-      return { summary: await summarize(c, cart.id, isProvince(String(form.province ?? '')) ? String(form.province) : null, parseCoords(form.lat, form.lng), cust?.id ?? null), qrEnabled: await shopQrEnabled(c) };
+      return { summary: await summarize(c, cart.id, isProvince(String(form.province ?? '')) ? String(form.province) : null, parseCoords(form.lat, form.lng), cust?.id ?? null), qrEnabled: await shopQrEnabled(c), gio: await orderWindow(c) };
     });
     if (!summary.items.length) return redirect(res, '/cart');
     const idem = genToken();
-    const prefill = { name: form.name, phone: form.phone, email: form.email, address_line: form.address_line, province: form.province, payment_method: form.payment_method, address_choice: form.address_choice, logged_in: !!cust, lat: form.lat, lng: form.lng };
+    // customer_note đi lại vào form: mọi lần dựng lại (phí ship đổi, giá đổi, hỏi xác minh…)
+    // mà làm mất lời dặn thì khách bấm Đặt hàng lần hai với một đơn THIẾU thứ họ đã gõ.
+    const prefill = { name: form.name, phone: form.phone, email: form.email, address_line: form.address_line, province: form.province, payment_method: form.payment_method, address_choice: form.address_choice, logged_in: !!cust, lat: form.lat, lng: form.lng, customer_note: form.customer_note };
     const g = gpsOpts(summary);
-    return sendHtml(res, opts.status ?? 200, renderCheckout(shopName, summary, idem, { formTs: issueFormTs(), prefill, addresses: cust?.addresses ?? [], gps: g.gps, nonce: g.nonce, qrEnabled, bn, challenge: needChallenge ? issueChallenge(idem) : undefined, ...opts }), {}, g.nonce);
+    return sendHtml(res, opts.status ?? 200, renderCheckout(shopName, summary, idem, { formTs: issueFormTs(), prefill, addresses: cust?.addresses ?? [], gps: g.gps, nonce: g.nonce, qrEnabled, bn, challenge: needChallenge ? issueChallenge(idem) : undefined, closed: gio && !gio.open ? closedMessage(gio) : null, ...opts }), {}, g.nonce);
   };
 
   // ── Lớp BOT no-JS ────────────────────────────────────────────────────────────
@@ -1327,7 +1360,7 @@ async function checkoutPlace(req, res, form, ctx) {
     // Đồng bộ vào form → reRender (honesty-loop ship) tính phí theo ĐÚNG tỉnh của địa chỉ đã lưu.
     form.name = inName; form.phone = inPhone; form.address_line = inLine; form.province = inProvince; form.lat = ''; form.lng = '';
   }
-  const f = parseOrderInput({ name: inName, phone: inPhone, email: form.email, address: inLine ? { line: String(inLine).slice(0, 300), province: inProvince ? String(inProvince).slice(0, 60) : undefined, ...(inCoords ? { lat: inCoords.lat, lng: inCoords.lng } : {}) } : null, payment_method: form.payment_method });
+  const f = parseOrderInput({ name: inName, phone: inPhone, email: form.email, address: inLine ? { line: String(inLine).slice(0, 300), province: inProvince ? String(inProvince).slice(0, 60) : undefined, ...(inCoords ? { lat: inCoords.lat, lng: inCoords.lng } : {}) } : null, payment_method: form.payment_method, customer_note: form.customer_note });
   if (f.error) return reRender({ error: f.error });
   // Form NGƯỜI MUA bắt buộc chọn tỉnh (API JSON /checkout vẫn tuỳ chọn — tương thích ngược,
   // nhưng không rõ tỉnh thì bị tính phí liên miền ở createOrderTx).
@@ -1363,6 +1396,11 @@ async function checkoutPlace(req, res, form, ctx) {
     if (bn) clearBuynowCookie(res); // giỏ mua-ngay đã chốt đơn → xoá cookie (giỏ chính không đụng)
     return redirect(res, `/checkout/success?number=${out.body.order_number}&token=${encodeURIComponent(out.body.lookup_token)}&placed=1`);
   } catch (err) {
+    // CỬA HÀNG KHÔNG NHẬN ĐƠN lúc này (0187) → dựng lại form GIỮ dữ liệu đã nhập + nói rõ khi
+    // nào quay lại. Trang lỗi cụt thì khách mất cả địa chỉ lẫn lời dặn đã gõ.
+    if (err.statusCode === 409 && err.body?.shop_closed) {
+      return reRender({ status: 409, error: err.body.error });
+    }
     // NGOÀI VÙNG GIAO (ship theo km, km>max) → dựng lại form báo rõ, KHÔNG phải lỗi phí (409).
     if (err.statusCode === 422 && err.body?.out_of_range) {
       return reRender({ error: 'Địa chỉ ngoài vùng giao của cửa hàng — vui lòng chọn địa chỉ gần hơn hoặc liên hệ cửa hàng.' });
@@ -1425,10 +1463,10 @@ async function getCheckoutPage(req, res, _body, ctx) {
   // nút "Đặt hàng · X" in một con số, đơn tạo ra thu một con số khác — và ô giam_seen của vòng
   // trung thực sẽ lệch, chặn luôn khách đổi điểm bằng 409 ở mọi lần bấm.
   const cust = await resolveCustomer(ctx.shopId, req, { withAddresses: true });
-  const { summary, qrEnabled } = await withTenant(ctx.shopId, async (c) => {
+  const { summary, qrEnabled, gio } = await withTenant(ctx.shopId, async (c) => {
     const cart = await findCart(c, token);
     if (!cart) return { summary: { items: [], subtotal_vnd: 0, shipping_vnd: 0, total_vnd: 0 }, qrEnabled: false };
-    return { summary: await summarize(c, cart.id, null, null, cust?.id ?? null), qrEnabled: await shopQrEnabled(c) };
+    return { summary: await summarize(c, cart.id, null, null, cust?.id ?? null), qrEnabled: await shopQrEnabled(c), gio: await orderWindow(c) };
   });
   if (!summary.items.length) return redirect(res, bn ? '/' : '/cart'); // giỏ trống → về giỏ (mua-ngay → về trang chủ)
   const prefill = cust ? {
@@ -1438,7 +1476,7 @@ async function getCheckoutPage(req, res, _body, ctx) {
   } : undefined;
   const g = gpsOpts(summary);
   return sendHtml(res, 200, renderCheckout(await getShopName(ctx.shopId), summary, genToken(),
-    { formTs: issueFormTs(), prefill, addresses: cust?.addresses ?? [], gps: g.gps, nonce: g.nonce, qrEnabled, bn }), {}, g.nonce);
+    { formTs: issueFormTs(), prefill, addresses: cust?.addresses ?? [], gps: g.gps, nonce: g.nonce, qrEnabled, bn, closed: gio && !gio.open ? closedMessage(gio) : null }), {}, g.nonce);
 }
 
 async function getLookupPage(req, res, _body, ctx) {

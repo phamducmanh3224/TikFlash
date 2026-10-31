@@ -635,7 +635,13 @@ const server = http.createServer((req, res) => runReq(req, res, async () => {
     }
 
     const data = await withStore(shopId, async (c) => {
-      const shopRes = await c.query(`SELECT slug, name, status, contact_email, contact_phone, business_address, logo_key FROM shops WHERE id = current_shop_id()`);
+      // Giờ nhận đơn (0187): `accepting_orders` do CÙNG hàm DB mà checkout dùng để chặn đơn trả
+      // lời — dải thông báo trên cửa hàng và cổng chốt đơn không thể nói hai điều khác nhau.
+      const shopRes = await c.query(`SELECT slug, name, status, contact_email, contact_phone, business_address, logo_key,
+              orders_paused, orders_pause_note,
+              to_char(order_open_time, 'HH24:MI') AS order_open_time, to_char(order_close_time, 'HH24:MI') AS order_close_time,
+              (NOT orders_paused AND shop_order_window_open(order_open_time, order_close_time, now())) AS accepting_orders
+         FROM shops WHERE id = current_shop_id()`);
       const shop = shopRes.rows[0];
       if (!shop) return { notFound: true }; // terminated/deleted (RLS)
       shop.logo_url = imgUrl(shop.logo_key); // header hiện logo nếu có

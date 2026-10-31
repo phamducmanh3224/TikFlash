@@ -58,10 +58,35 @@ function sectionFields() {
   return out;
 }
 
+// Nhóm cài đặt RA ĐỜI SAU đường ghi-đè-toàn-bộ và cố ý KHÔNG nằm trong nó (0187: giờ nhận
+// đơn). Form cũ `POST /settings` không có ô nào của nhóm này, nên nếu cột của nhóm lọt vào câu
+// ghi-đè thì mỗi lần lưu form cũ là XOÁ giờ mở cửa / bỏ tạm nghỉ — đúng lớp lỗi bộ này sinh ra
+// để chặn. Khai TƯỜNG MINH từng nhóm và các cột của nó; test dưới khẳng định cả hai chiều.
+const NHOM_NGOAI_GHI_DE = {
+  hours: ['orders_paused', 'orders_pause_note', 'order_open_time', 'order_close_time'],
+};
+
+test('nhóm ngoài đường ghi-đè: KHÔNG cột nào lọt vào câu ghi-đè, và seller có câu UPDATE riêng ghi ĐÚNG các cột đó', () => {
+  const cols = fullUpdateColumns();
+  const groups = sectionFields();
+  for (const [nhom, cot] of Object.entries(NHOM_NGOAI_GHI_DE)) {
+    assert.deepEqual(groups[nhom], cot, `BFF khai nhóm ${nhom} khác danh sách đã thống nhất`);
+    const lot = cot.filter((c) => cols.includes(c));
+    assert.deepEqual(lot, [], `cột của nhóm ${nhom} lọt vào đường ghi-đè-toàn-bộ — form cũ sẽ xoá chúng: ${lot.join(', ')}`);
+    // Câu UPDATE riêng của nhóm: neo vào cột đầu tiên được gán $1.
+    const m = new RegExp(`UPDATE shops\\s+SET (${cot[0]} = \\$1[\\s\\S]*?)WHERE id = current_shop_id\\(\\)`).exec(seller());
+    assert.ok(m, `seller không có câu UPDATE riêng cho nhóm ${nhom}`);
+    const ghi = [...m[1].matchAll(/(\w+)\s*=\s*\$\d+/g)].map((x) => x[1]);
+    assert.deepEqual(ghi.sort(), [...cot].sort(), `câu UPDATE nhóm ${nhom} ghi khác các cột BFF gửi`);
+  }
+});
+
 test('bốn nhóm settings phủ ĐÚNG mọi cột mà đường ghi-đè-toàn-bộ chạm tới', () => {
   const cols = fullUpdateColumns();
   assert.equal(cols.length, 22, `câu UPDATE ghi-đè có ${cols.length} cột, không phải 22`);
-  const groups = sectionFields();
+  const groups = Object.fromEntries(Object.entries(sectionFields()).filter(([k]) => !(k in NHOM_NGOAI_GHI_DE)));
+  assert.deepEqual(Object.keys(groups).sort(), ['operations', 'privacy', 'profile', 'shipping'],
+    'nhóm mới phải hoặc nằm trong đường ghi-đè, hoặc khai vào NHOM_NGOAI_GHI_DE — không được lơ lửng');
   const covered = Object.values(groups).flat();
 
   const missing = cols.filter((c) => !covered.includes(c));

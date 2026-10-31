@@ -1446,6 +1446,40 @@ function unusedImagesCard(base, unused) {
   return `<div class="card"><h2 style="margin-top:0">Dọn ảnh không dùng</h2>${body}</div>`;
 }
 
+// GIỜ NHẬN ĐƠN + TẠM NGHỈ (0187). Dòng trạng thái đọc `accepting_orders_now` — do seller tính
+// bằng CHÍNH hàm DB mà checkout dùng để chặn đơn — chứ không tự suy ở đây: trang Cài đặt nói
+// "khách đang đặt được" thì phải là câu trả lời của cổng thật, không phải một bản đoán thứ hai.
+// `source` là dữ liệu đã lưu (trạng thái thật); `s` có thể là bản nháp vừa gửi lỗi (ô nhập).
+function gioNhanDonCard(base, s, source, oLoi) {
+  const tamNghi = s.orders_paused === true || s.orders_paused === 'on' || s.orders_paused === '1';
+  const trangThai = source.orders_paused === true
+    ? '<span class="pill">⏸️ Đang tạm nghỉ — khách không đặt được đơn mới</span>'
+    : source.accepting_orders_now === false
+      ? `<span class="pill">🌙 Ngoài giờ nhận đơn — khách đặt lại được từ ${esc(source.order_open_time ?? '')}</span>`
+      : source.accepting_orders_now === true
+        ? '<span class="pill">✅ Đang nhận đơn</span>'
+        : '';
+  return `<div class="card" id="gio-nhan-don">
+      <h2 style="margin-top:0">Giờ nhận đơn</h2>
+      ${trangThai ? `<p style="margin-top:0">Hiện tại: ${trangThai}</p>` : ''}
+      <form method="POST" action="${base}/settings/hours">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="checkbox" name="orders_paused" value="on"${tamNghi ? ' checked' : ''}${oLoi('orders_paused')} style="width:auto"> Tạm nghỉ — ngừng nhận đơn mới trên website</label>
+        <p class="muted" style="margin:4px 0 10px;font-size:.85rem">Dùng khi nghỉ lễ, hết nguyên liệu hoặc quá đông. Bỏ tích rồi bấm Lưu để mở lại.</p>
+        <label>Lời nhắn cho khách khi tạm nghỉ <span class="muted" style="font-weight:400">(không bắt buộc)</span></label>
+        <input name="orders_pause_note"${oLoi('orders_pause_note')} value="${esc(s.orders_pause_note ?? '')}" maxlength="200" placeholder="Ví dụ: Quán nghỉ Tết, mở lại mùng 6">
+        <div class="actions" style="align-items:end;flex-wrap:wrap;margin-top:10px">
+          <div><label>Bắt đầu nhận đơn</label><input type="time" name="order_open_time"${oLoi('order_open_time')} value="${esc(s.order_open_time ?? '')}" style="width:150px"></div>
+          <div><label>Ngừng nhận đơn</label><input type="time" name="order_close_time"${oLoi('order_close_time')} value="${esc(s.order_close_time ?? '')}" style="width:150px"></div>
+        </div>
+        <p class="muted" style="font-size:.8rem;margin:6px 0 0">Giờ Việt Nam, áp dụng mỗi ngày. Để trống cả hai ô = nhận đơn cả ngày.
+          Giờ ngừng nhỏ hơn giờ bắt đầu nghĩa là qua nửa đêm (ví dụ 18:00 → 02:00).
+          Ngoài giờ, khách vẫn xem món và bỏ vào giỏ được, chỉ chưa đặt được đơn.
+          Chỉ áp dụng cho đơn khách tự đặt trên website — đơn bạn tạo tay và đơn từ bot Messenger không bị chặn.</p>
+        <div class="actions"><button class="btn" type="submit">Lưu giờ nhận đơn</button></div>
+      </form>
+    </div>`;
+}
+
 export function renderShopSettings(ctx, shopId, shop, notice, err, unused, draftSection = null) {
   const base = `/shops/${esc(shopId)}`;
   if (!CONTENT_ROLES.has(ctx.role)) {
@@ -1477,6 +1511,7 @@ export function renderShopSettings(ctx, shopId, shop, notice, err, unused, draft
     ${notice ? `<div class="card" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46">${esc(notice)}</div>` : ''}
     <nav class="settings-jump" aria-label="Nhóm cài đặt">
       <a href="#thong-tin">Thông tin<small>Tên, liên hệ và địa chỉ cửa hàng</small></a>
+      <a href="#gio-nhan-don">Giờ nhận đơn<small>Giờ mở cửa và tạm nghỉ</small></a>
       <a href="#phi-ship">Vận chuyển<small>Phí vùng, khối lượng và phí theo km</small></a>
       <a href="#van-hanh">Vận hành<small>Cảnh báo tồn và chống đơn ảo</small></a>
       <a href="#quyen-rieng-tu">Quyền riêng tư<small>Thời hạn lưu dữ liệu khách hàng</small></a>
@@ -1496,6 +1531,7 @@ export function renderShopSettings(ctx, shopId, shop, notice, err, unused, draft
         <div class="actions"><button class="btn" type="submit">Lưu thông tin</button></div>
       </form>
     </div>
+    ${gioNhanDonCard(base, s, source, oLoi)}
     <div class="card" id="logo">
       <h2 style="margin-top:0">Logo cửa hàng</h2>
       ${s.logo_url
@@ -3725,6 +3761,9 @@ export function renderOrderDetail(ctx, shopId, o, err, shipping, edited, returne
     ${o.status === 'returned' ? `<div class="card" style="border-color:#fcd34d;background:var(--warnbg)">
       <h2 style="margin-top:0">↩️ Đơn bị hoàn (bom hàng)</h2>
       <p class="muted" style="margin-bottom:0">${returnedStockNote}</p></div>` : ''}
+    ${o.customer_note ? `<div class="card khach-dan" style="border-color:#fcd34d;background:var(--warnbg)">
+      <h2 style="margin-top:0">📝 Khách dặn</h2>
+      <p style="margin-bottom:0;white-space:pre-line">${esc(o.customer_note)}</p></div>` : ''}
     <div class="card"><h2>Sản phẩm</h2><div class="tblscroll">${tblCards({
     head: [{ html: 'Mặt hàng' }, { html: 'Đơn giá × SL' }, { html: 'Thành tiền' }],
     rows: (o.lines ?? []).map((l) => [
@@ -4059,6 +4098,7 @@ function printDoc(shopId, s, o, { backLink = false } = {}) {
       <div><b>Khách:</b> ${esc(o.customer_name ?? '')} ${o.customer_phone ? `· ${esc(o.customer_phone)}` : ''}${o.customer_email ? ` · ${esc(o.customer_email)}` : ''}</div>
       ${addr ? `<div style="margin-top:4px"><b>Giao tới:</b> ${esc(addr)}</div>` : ''}
       ${ship ? `<div style="margin-top:4px"><b>Vận đơn:</b> ${esc(ship.tracking_number ?? '')} ${esc(ship.carrier ?? '')}</div>` : ''}
+      ${o.customer_note ? `<div style="margin-top:4px;white-space:pre-line"><b>Khách dặn:</b> ${esc(o.customer_note)}</div>` : ''}
     </div>
     <table><thead><tr><th>Sản phẩm</th><th class="r">Đơn giá</th><th class="r">SL</th><th class="r">Thành tiền</th></tr></thead><tbody>
       ${lines.map((l) => `<tr><td>${esc(l.title_snapshot)}${l.sku_snapshot ? ` <span style="color:#6b7280">(${esc(l.sku_snapshot)})</span>` : ''}</td><td class="r">${money(l.unit_price_vnd)}</td><td class="r">${esc(l.qty)}</td><td class="r">${money(Number(l.unit_price_vnd) * l.qty)}</td></tr>`).join('')}

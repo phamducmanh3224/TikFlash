@@ -1820,3 +1820,81 @@ describe('Kiểu dữ liệu tiền tệ', () => {
     );
   });
 });
+
+describe('Shop đồ ăn, đợt 1 (0187): giờ nhận đơn + lời dặn của khách', () => {
+  test('shop_order_window_open: biên [mở, đóng), khung qua nửa đêm, và KHÔNG phụ thuộc múi giờ phiên', async () => {
+    // Container chạy UTC. Quên đổi giờ VN là quán mở 10:00 nhận đơn từ 17:00 — test cũng chạy
+    // UTC nên mọi khẳng định "trùng giờ máy" đều xanh. Vì thế đặt CẢ HAI múi giờ phiên khác
+    // nhau rồi so: hàm phải trả cùng một đáp án.
+    const ca = [
+      // [thời điểm UTC, giờ VN tương ứng, mở 10–21?, mở 18–02?]
+      ['2026-10-31 02:59:59+00', '09:59:59', false, false],
+      ['2026-10-31 03:00:00+00', '10:00:00', true, false],
+      ['2026-10-31 13:59:59+00', '20:59:59', true, true],
+      ['2026-10-31 14:00:00+00', '21:00:00', false, true],
+      ['2026-10-31 18:59:59+00', '01:59:59', false, true],
+      ['2026-10-31 19:00:00+00', '02:00:00', false, false],
+    ];
+    const c = await owner.connect();
+    try {
+      for (const tz of ['UTC', 'Asia/Tokyo', 'America/Los_Angeles']) {
+        await c.query(`SET TIME ZONE '${tz}'`);
+        for (const [at, gioVn, ngay, dem] of ca) {
+          const { rows } = await c.query(
+            `SELECT shop_order_window_open('10:00','21:00',$1::timestamptz) AS ngay,
+                    shop_order_window_open('18:00','02:00',$1::timestamptz) AS dem,
+                    shop_order_window_open(NULL,NULL,$1::timestamptz) AS ca_ngay`, [at]);
+          assert.deepEqual(rows[0], { ngay, dem, ca_ngay: true }, `${gioVn} giờ VN (phiên ${tz})`);
+        }
+      }
+    } finally {
+      await c.query('RESET TIME ZONE');
+      c.release();
+    }
+  });
+
+  test('CHECK của shops chặn khung giờ nửa vời, khung rỗng và lời nhắn quá dài', async () => {
+    const shop = (await owner.query(`SELECT id FROM shops ORDER BY created_at LIMIT 1`)).rows[0];
+    assert.ok(shop, 'cần ít nhất một shop trong DB test');
+    for (const [set, ten] of [
+      [`order_open_time = '10:00', order_close_time = NULL`, 'chỉ có giờ mở'],
+      [`order_open_time = NULL, order_close_time = '21:00'`, 'chỉ có giờ đóng'],
+      [`order_open_time = '10:00', order_close_time = '10:00'`, 'mở = đóng'],
+      [`orders_pause_note = ''`, 'lời nhắn rỗng (phải là NULL)'],
+      [`orders_pause_note = repeat('x', 201)`, 'lời nhắn 201 ký tự'],
+    ]) {
+      const c = await owner.connect();
+      try {
+        await c.query('BEGIN');
+        const code = await sqlstateOf(() => c.query(`UPDATE shops SET ${set} WHERE id = $1`, [shop.id]));
+        assert.equal(code, '23514', `${ten}: phải bị CHECK chặn (23514)`);
+      } finally {
+        await c.query('ROLLBACK');
+        c.release();
+      }
+    }
+  });
+
+  test('quyền: seller sửa được giờ nhận đơn THEO CỘT; checkout/storefront đọc được; worker xoá được lời dặn nhưng KHÔNG đọc', async () => {
+    const { rows } = await owner.query(`
+      SELECT has_column_privilege('app_rw','shops','orders_paused','UPDATE')      AS rw_paused,
+             has_column_privilege('app_rw','shops','order_open_time','UPDATE')    AS rw_open,
+             has_table_privilege('app_rw','shops','UPDATE')                       AS rw_table_update,
+             has_column_privilege('app_checkout','shops','orders_paused','SELECT') AS co_read,
+             has_column_privilege('app_store','shops','order_close_time','SELECT') AS store_read,
+             has_column_privilege('app_checkout','shops','orders_paused','UPDATE') AS co_write,
+             has_column_privilege('app_store','shops','orders_paused','UPDATE')    AS store_write,
+             has_column_privilege('app_checkout','orders','customer_note','INSERT') AS co_note_insert,
+             has_column_privilege('app_expiry','orders','customer_note','UPDATE')  AS expiry_note_update,
+             has_column_privilege('app_expiry','orders','customer_note','SELECT')  AS expiry_note_select`);
+    assert.deepEqual(rows[0], {
+      rw_paused: true, rw_open: true,
+      rw_table_update: false,          // 0165 đã thu UPDATE cấp bảng — 0187 không được mở lại
+      co_read: true, store_read: true,
+      co_write: false, store_write: false, // bề mặt công khai không tự mở cửa được
+      co_note_insert: true,
+      expiry_note_update: true,        // sweep ẩn danh phải XOÁ được lời dặn…
+      expiry_note_select: false,       // …nhưng vai dọn dẹp không cần ĐỌC thứ nó xoá
+    });
+  });
+});

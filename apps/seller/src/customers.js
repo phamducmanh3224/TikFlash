@@ -97,7 +97,7 @@ async function eraseCustomer(res, ctx, _b, params) {
     if (nums.length === 0) return { code: 404, body: { error: 'không tìm thấy khách hàng' } };
     const ord = await c.query(
       `UPDATE orders SET customer_name = '(đã ẩn danh)', customer_phone = NULL, customer_email = NULL,
-              shipping_address = NULL, client_ip_hash = NULL, anonymized_at = now()
+              shipping_address = NULL, customer_note = NULL, client_ip_hash = NULL, anonymized_at = now()
         WHERE customer_phone = $1`, [phone],
     );
     // Đánh giá VERIFIED khớp order_number = liên kết chứng minh được (badge tính theo

@@ -479,7 +479,18 @@ const SECTIONS = {
       <a href="/account" class="hicon" title="Tài khoản"><span class="i">${I_USER}</span><span class="vh">Tài khoản</span></a>
       <a href="/cart" class="hicon cart" title="Giỏ hàng"><span class="i">${I_CART}</span><span class="vh">Giỏ hàng</span><span class="cart-badge" id="cart-badge" aria-live="polite" hidden></span></a>
     </div>`;
-    const topbar = `<div class="topbar">${esc(topbarText)}</div>`;
+    // DẢI "CHƯA NHẬN ĐƠN" (0187): tạm nghỉ / ngoài giờ. Nằm ngay dưới thanh thông báo trên MỌI
+    // trang (header dựng ở mọi trang), để khách biết TRƯỚC khi chọn món — không phải tới bước
+    // thanh toán mới gặp nút bị khoá. Checkout vẫn là nơi chặn thật; đây chỉ là lời báo trước.
+    // `accepting_orders === false` (so đúng false): shop chưa có cột (dữ liệu cũ, test dựng tay)
+    // thì không hiện gì — vắng thông tin không được đọc thành "quán đóng cửa".
+    const sh = ctx.shop ?? {};
+    const closedBar = sh.accepting_orders === false
+      ? `<div class="closedbar" role="status">${sh.orders_paused
+        ? `Cửa hàng đang tạm nghỉ, chưa nhận đơn mới.${sh.orders_pause_note ? ` ${esc(sh.orders_pause_note)}` : ''}`
+        : `Ngoài giờ nhận đơn — cửa hàng nhận đơn từ ${esc(sh.order_open_time ?? '')} đến ${esc(sh.order_close_time ?? '')} mỗi ngày.`}</div>`
+      : '';
+    const topbar = `<div class="topbar">${esc(topbarText)}</div>${closedBar}`;
     if (band) {
       // 2 tầng: hàng tiện ích (brand + tìm + tài khoản + giỏ) TRÊN nền trắng, dải NAV NỀN HỒNG
       // full-bleed DƯỚI. navtoggle đặt ở CẤP header (không trong .wrap) để mobile
@@ -899,6 +910,7 @@ a:focus-visible,.btn:focus-visible,summary:focus-visible,button:focus-visible,.t
    nên mất nền là chữ TRẮNG TRÊN NỀN TRẮNG — biến mất hẳn.
    Hai khai báo cùng thuộc tính: trình duyệt hiểu color-mix dùng cái sau (không đổi gì),
    trình duyệt cũ giữ cái trước. Đây là cách xuống cấp của CSS, không phải mẹo. */
+.closedbar{background:#fffbeb;color:#92400e;border-bottom:1px solid #fcd34d;text-align:center;font-size:.85rem;font-weight:600;padding:8px 16px;overflow-wrap:anywhere}
 .topbar{background:var(--color-primary);background:color-mix(in srgb,var(--color-primary) 86%,#0a0a0a);color:#fff;text-align:center;font-size:.8rem;font-weight:500;letter-spacing:.02em;padding:8px 16px}
 .hdr{position:sticky;top:0;z-index:20;background:var(--color-bg);background:color-mix(in srgb,var(--color-bg) 86%,transparent);backdrop-filter:saturate(1.5) blur(12px);-webkit-backdrop-filter:saturate(1.5) blur(12px);border-bottom:1px solid color-mix(in srgb,var(--color-border) 70%,transparent)}
 .hdr .wrap{display:flex;align-items:center;min-height:68px;gap:18px}

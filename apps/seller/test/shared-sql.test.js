@@ -67,10 +67,31 @@ test('VARIANT_NOT_ORPHAN_SQL giống hệt nhau ở mọi service', () => {
 });
 
 test('quyền UPDATE shops của app_rw khớp chính xác các route seller đang dùng', () => {
-  const migration = doc('packages/db/migrations/0165_shop_go_live_privilege_guard.sql');
-  const grant = /GRANT\s+UPDATE\s*\(([\s\S]*?)\)\s+ON\s+shops\s+TO\s+app_rw\s*;/i.exec(migration);
-  assert.ok(grant, '0165: không tìm thấy column grant UPDATE shops cho app_rw');
-  const granted = new Set(grant[1].split(',').map((column) => column.trim().toLowerCase()).filter(Boolean));
+  // 0165 thu UPDATE cấp bảng rồi cấp lại THEO CỘT; migration về sau thêm cột mới cho seller
+  // bằng câu GRANT riêng (0187: giờ nhận đơn). Tập quyền thật = HỢP mọi câu grant từ 0165 trở
+  // đi. Chỉ đọc 0165 thì cột mới luôn bị báo "thiếu grant" dù DB có đủ — đỏ giả.
+  const dir = join(ROOT, 'packages/db/migrations');
+  const files = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f) && f >= '0165').sort();
+  assert.ok(files[0]?.startsWith('0165_'), 'không thấy 0165 — mốc thu quyền cấp bảng đã đổi tên?');
+  const granted = new Set();
+  for (const f of files) {
+    const sql = readFileSync(join(dir, f), 'utf8').replace(/--[^\n]*/g, '');
+    // Sau mốc 0165, KHÔNG migration nào được thu quyền theo kiểu bộ dò này không hiểu: một
+    // REVOKE về sau làm tập "đã cấp" ở đây lớn hơn tập thật trong DB.
+    if (f !== files[0]) {
+      assert.doesNotMatch(sql, /\bREVOKE\b[^;]*\bON\s+shops\s+FROM\b[^;]*\bapp_rw\b/i,
+        `${f}: REVOKE trên shops từ app_rw sau 0165 — cập nhật bộ dò này cho khớp`);
+    }
+    assert.doesNotMatch(sql, /\bGRANT\s+(?:ALL|UPDATE)\s+ON\s+(?:TABLE\s+)?shops\s+TO\b[^;]*\bapp_rw\b/i,
+      `${f}: GRANT UPDATE CẤP BẢNG shops cho app_rw — đúng thứ 0165 đã thu lại`);
+    // `[^()]*` chứ KHÔNG `[\s\S]*?`: bản lười băng qua cả câu grant TRƯỚC (0187 có
+    // `GRANT UPDATE (customer_note) ON orders TO app_expiry;` đứng trên) rồi nuốt luôn
+    // ALTER TABLE vào "danh sách cột" — đo được: đỏ giả với 'add column …' là tên cột.
+    for (const g of sql.matchAll(/GRANT\s+UPDATE\s*\(([^()]*)\)\s+ON\s+shops\s+TO\s+app_rw\s*;/gi)) {
+      for (const column of g[1].split(',').map((c) => c.trim().toLowerCase()).filter(Boolean)) granted.add(column);
+    }
+  }
+  assert.ok(granted.size > 0, '0165+: không tìm thấy column grant UPDATE shops cho app_rw');
 
   const used = new Set();
   let updates = 0;

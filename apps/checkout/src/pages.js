@@ -83,6 +83,8 @@ h2{font-size:1rem;margin:0 0 .7em;font-weight:700;letter-spacing:-.01em;color:va
 .btn:hover{background-position:100% 0;text-decoration:none;transform:translateY(-2px);box-shadow:0 18px 40px -14px color-mix(in srgb,var(--pri) 65%,transparent)}.btn:active{transform:translateY(1px)}
 .btn.alt{background:var(--card);color:var(--ink);border:1.5px solid color-mix(in srgb,var(--pri) 26%,var(--bd));box-shadow:var(--sh-sm)}
 .btn.alt:hover{background:var(--card);border-color:var(--pri);color:var(--pri);opacity:1;transform:translateY(-2px)}
+/* Nút bị khoá (0187: cửa hàng chưa nhận đơn) phải TRÔNG như bị khoá — để nguyên nền gradient thì khách bấm mãi không thấy gì xảy ra. */
+.btn:disabled,.btn:disabled:hover{background:#e2e8f0;color:#475569;box-shadow:none;cursor:not-allowed;transform:none}
 label{display:block;font-size:.88rem;margin:12px 0 5px;font-weight:600;color:var(--soft)}
 input,textarea,select{width:100%;padding:11px 13px;border:1.5px solid var(--bd);border-radius:var(--r);font-size:1rem;font-family:inherit;color:var(--ink);background:var(--card);transition:border-color .15s,box-shadow .15s}
 input:focus,textarea:focus,select:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px color-mix(in srgb,var(--pri) 20%,transparent)}
@@ -336,8 +338,24 @@ export function renderCheckout(shopName, s, idemToken, opts = {}) {
         <div class="co-lprice">${money(it.line_total_vnd)}</div>
       </div>`).join('');
 
+  // CỬA HÀNG KHÔNG NHẬN ĐƠN lúc này (0187: tạm nghỉ / ngoài giờ). Nói NGAY ĐẦU trang, trước
+  // khi khách mất công điền form, và khoá nút Đặt hàng — nhưng KHÔNG giấu form: khách vẫn
+  // xem được tổng tiền, phí ship, và quay lại trong giờ là giỏ còn nguyên. Server vẫn chặn ở
+  // createOrderTx; nút khoá ở đây chỉ để không mời bấm một nút chắc chắn bị từ chối.
+  const closed = typeof opts.closed === 'string' && opts.closed ? opts.closed : null;
+  const closedCard = closed ? `<div class="card co-closed" role="status" style="border-color:#fcd34d;background:#fffbeb;color:#92400e"><strong>⏰ ${esc(closed)}</strong></div>` : '';
+  // Lỗi trùng đúng câu "cửa hàng đóng" (dựng lại sau khi server từ chối) thì không in hai lần.
+  const errCard = opts.error && opts.error !== closed
+    ? `<div class="card" style="border-color:#fca5a5;background:#fef2f2;color:#b91c1c"><strong>${esc(opts.error)}</strong></div>` : '';
+  // LỜI DẶN (0187). Tuỳ chọn, 300 ký tự khớp CHECK của cột. Không required: phần lớn đơn không
+  // cần dặn gì, bắt điền là thêm một chỗ khách bỏ ngang.
+  const noteCard = `<div class="card"><h2 id="note-h">Lời dặn cho cửa hàng <span class="muted" style="font-weight:400;font-size:.85rem">(không bắt buộc)</span></h2>
+            <textarea id="f-note" aria-labelledby="note-h" name="customer_note" rows="2" maxlength="300" placeholder="Ví dụ: ít cay, không hành, gọi trước khi giao">${v(pf.customer_note)}</textarea>
+          </div>`;
+
   return page('Thanh toán', shopName, `<h1>Thanh toán</h1>
-    ${opts.error ? `<div class="card" style="border-color:#fca5a5;background:#fef2f2;color:#b91c1c"><strong>${esc(opts.error)}</strong></div>` : ''}
+    ${closedCard}
+    ${errCard}
     ${externalDiscountNotice(s)}
     <div class="co-grid">
       <aside class="co-summary">
@@ -365,6 +383,7 @@ export function renderCheckout(shopName, s, idemToken, opts = {}) {
           <input type="hidden" name="lat" id="f-lat" value="${v(pf.lat)}">
           <input type="hidden" name="lng" id="f-lng" value="${v(pf.lng)}">
           ${recipient}
+          ${noteCard}
           <div class="card pay"><h2>Thanh toán</h2>
             <label><input type="radio" name="payment_method" value="cod"${pm === 'cod' ? ' checked' : ''}> Thanh toán khi nhận hàng (COD)</label>
             ${qrOn ? `<label><input type="radio" name="payment_method" value="qr"${pm === 'qr' ? ' checked' : ''}> Chuyển khoản QR (VietQR)</label>` : ''}
@@ -375,7 +394,9 @@ export function renderCheckout(shopName, s, idemToken, opts = {}) {
             <input type="hidden" name="challenge_sig" value="${esc(ch.sig)}">
             <input name="challenge_answer" required inputmode="numeric" maxlength="4" style="max-width:120px" placeholder="Kết quả">
           </div>` : ''}
-          <div class="checkout-submit"><button class="btn" type="submit">Đặt hàng · ${money(s.total_vnd)}</button></div>
+          <div class="checkout-submit">${closed
+            ? '<button class="btn" type="submit" disabled aria-disabled="true">Cửa hàng chưa nhận đơn lúc này</button>'
+            : `<button class="btn" type="submit">Đặt hàng · ${money(s.total_vnd)}</button>`}</div>
         </form>
         <a class="btn alt" href="${opts.bn ? '/' : '/cart'}" style="margin-top:8px">${opts.bn ? 'Tiếp tục mua sắm' : 'Quay lại giỏ'}</a>
       </div>
