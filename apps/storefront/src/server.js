@@ -834,6 +834,12 @@ const server = http.createServer((req, res) => runReq(req, res, async () => {
         p.media = (await c.query(`SELECT public_key, variant_id FROM media WHERE product_id = $1 ORDER BY position, created_at`, [p.id]))
           .rows.map((m) => ({ url: imgUrl(m.public_key), variant_id: m.variant_id }));
         p.specs = (await c.query(`SELECT name, value FROM product_specs WHERE product_id = $1 ORDER BY position`, [p.id])).rows;
+        // Giá theo số lượng (0188) — bảng "mua từ N cái" in cạnh giá. Cùng hàng rào POS ngoài với
+        // hàm chọn bậc của checkout: shop mà checkout KHÔNG áp bậc thì trang cũng không hứa bậc.
+        p.qty_breaks = (await c.query(
+          `SELECT min_qty, price_vnd FROM product_qty_breaks
+            WHERE product_id = $1 AND external_master_allows_online_promotions() ORDER BY min_qty`, [p.id]))
+          .rows.map((r) => ({ min_qty: Number(r.min_qty), price_vnd: Number(r.price_vnd) }));
         p.category = (await c.query(
           `SELECT c.slug, c.name FROM product_categories pc JOIN categories c ON c.id = pc.category_id
             WHERE pc.product_id = $1 ORDER BY c.position LIMIT 1`, [p.id])).rows[0] ?? null;

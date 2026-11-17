@@ -2834,6 +2834,19 @@ async function specsSave(req, res, me, cookie, shopId, pid) {
   return productDetail(res, me, cookie, shopId, pid, r.json?.error ?? 'Không lưu được thông số.');
 }
 
+// Giá khi mua nhiều (0188): năm cặp ô cố định "mua từ / giá mỗi cái". Chuyển nguyên văn chuỗi
+// đã gõ sang seller — luật kiểm và câu lỗi theo từng mức nằm ở seller (frontend không phải
+// nguồn quyết định giá, §9.2). Dòng trống cả hai ô seller tự bỏ qua.
+async function qtyBreaksSave(req, res, me, cookie, shopId, pid) {
+  if (!isMember(me, shopId)) return denyShop(res, me);
+  const f = await readForm(req);
+  const qty_breaks = Array.from({ length: 5 }, (_, i) => ({
+    min_qty: String(f[`min_qty_${i}`] ?? '').trim(), price_vnd: String(f[`price_vnd_${i}`] ?? '').trim() }));
+  const r = await sellerApi('PUT', `/shops/${shopId}/products/${pid}/qty-breaks`, { cookie, body: { qty_breaks } });
+  if (r.status === 200) return redirect(res, `/shops/${shopId}/products/${pid}`);
+  return productDetail(res, me, cookie, shopId, pid, r.json?.error ?? 'Không lưu được giá khi mua nhiều.');
+}
+
 // Gán 1 ảnh cho 1 biến thể (variant_id rỗng = ảnh chung sản phẩm).
 async function mediaAssignVariant(req, res, me, cookie, shopId, pid, mediaId) {
   if (!isMember(me, shopId)) return denyShop(res, me);
@@ -4691,6 +4704,7 @@ async function handle(req, res, url, p) {
     if ((m = new RegExp(`^/shops/${UUID}/products/${UUID}/delete$`).exec(p)) && req.method === 'POST') return productDelete(res, me, cookie, m[1], m[2]);
     if ((m = new RegExp(`^/shops/${UUID}/products/${UUID}/options$`).exec(p)) && req.method === 'POST') return optionsSave(req, res, me, cookie, m[1], m[2]);
     if ((m = new RegExp(`^/shops/${UUID}/products/${UUID}/specs$`).exec(p)) && req.method === 'POST') return specsSave(req, res, me, cookie, m[1], m[2]);
+    if ((m = new RegExp(`^/shops/${UUID}/products/${UUID}/qty-breaks$`).exec(p)) && req.method === 'POST') return qtyBreaksSave(req, res, me, cookie, m[1], m[2]);
     if ((m = new RegExp(`^/shops/${UUID}/products/${UUID}/variants$`).exec(p)) && req.method === 'POST') return variantAdd(req, res, me, cookie, m[1], m[2]);
     if ((m = new RegExp(`^/shops/${UUID}/products/${UUID}/variants/bulk$`).exec(p)) && req.method === 'POST') return variantBulkPrice(req, res, me, cookie, m[1], m[2]);
     if ((m = new RegExp(`^/shops/${UUID}/products/${UUID}/inventory/bulk$`).exec(p)) && req.method === 'POST') return inventoryBulkAdjust(req, res, me, cookie, m[1], m[2]);

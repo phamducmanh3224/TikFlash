@@ -319,6 +319,50 @@ const publicCheckoutPolicy = (policy) => ({
   cod_only: policy.cod_only,
 });
 
+// GIÁ THEO SỐ LƯỢNG (0188). Dùng CHUNG cho summarize (hiển thị) và createOrderTx (chốt đơn) —
+// hai chỗ đọc hai luật thì nút "Đặt hàng · X" in một số còn đơn tính một số, và cổng
+// subtotal_seen 409 mãi. Chọn BẬC là việc của hàm DB qty_break_price (nguồn duy nhất, có gác
+// POS ngoài như flash sale); ở đây chỉ ĐẾM số lượng gộp theo sản phẩm.
+//
+// Đếm trên CHÍNH danh sách `items` người gọi vừa đọc — tức đã loại biến thể mồ côi. Đếm bằng
+// một câu SQL riêng thì lại thành hai tập dòng khác nhau, đúng lớp lỗi giỏ/đơn đếm lệch đã
+// gây vòng 409 vô tận (xem chú thích soMonAn trong summarize).
+//
+// Gộp mọi biến thể của MỘT sản phẩm (chủ dự án chọn 17/11): 1 M + 1 L + 1 XL cùng mẫu là 3 cái.
+async function qtyBreaksFor(c, items) {
+  const n = new Map();
+  for (const it of items) n.set(it.product_id, (n.get(it.product_id) ?? 0) + Number(it.qty));
+  if (n.size === 0) return new Map();
+  const ids = [...n.keys()];
+  const rows = (await c.query(
+    `SELECT t.pid, t.n, qty_break_price(t.pid, t.n) AS price, nx.min_qty AS next_qty, nx.price_vnd AS next_price
+       FROM unnest($1::uuid[], $2::bigint[]) AS t(pid, n)
+       LEFT JOIN LATERAL (
+         SELECT qb.min_qty, qb.price_vnd FROM product_qty_breaks qb
+          WHERE external_master_allows_online_promotions()
+            AND qb.product_id = t.pid AND qb.min_qty > t.n
+          ORDER BY qb.min_qty LIMIT 1) nx ON true`,
+    [ids, ids.map((id) => n.get(id))])).rows;
+  return new Map(rows.map((r) => [r.pid, {
+    count: Number(r.n),
+    price: r.price == null ? null : Number(r.price),
+    // Bậc kế tiếp — CHỈ để giỏ nhắc "mua thêm N cái để được giá X". Không vào tiền nào.
+    next: r.next_qty == null ? null : { min_qty: Number(r.next_qty), price_vnd: Number(r.next_price) },
+  }]));
+}
+// Giá MỘT cái của một dòng: thấp nhất giữa giá biến thể, flash sale và bậc số lượng. KHÔNG cộng
+// dồn hai khoản giảm — cộng dồn sinh giá dưới vốn mà không ai chủ ý đặt. Bậc cũng không bao giờ
+// làm dòng ĐẮT lên (biến thể vốn rẻ hơn bậc thì giữ giá biến thể).
+// src: null = giá gốc · 'sale' = flash sale thắng · 'qty' = bậc số lượng thắng.
+function lineUnit(it, qb) {
+  const base = Number(it.price_vnd);
+  let unit = base, src = null;
+  if (it.sale_price_vnd != null && Number(it.sale_price_vnd) < unit) { unit = Number(it.sale_price_vnd); src = 'sale'; }
+  const tier = qb.get(it.product_id)?.price ?? null;
+  if (tier != null && tier < unit) { unit = tier; src = 'qty'; }
+  return { base, unit, src };
+}
+
 // customerId: khách ĐĂNG NHẬP → tóm tắt trừ luôn phần ĐỔI ĐIỂM. Trước đây phần điểm chỉ được
 // cộng vào ở handler /cart, nên TRANG GIỎ và TRANG CHECKOUT nói hai con số khác nhau: giỏ hiện
 // "−30.000₫ đổi điểm", checkout thì không, mà đơn tạo ra thì CÓ trừ. Nút "Đặt hàng · X" in ra
@@ -327,7 +371,7 @@ const publicCheckoutPolicy = (policy) => ({
 async function summarize(c, cartId, province = null, coords = null, customerId = null, knownPolicy = null) {
   const policy = knownPolicy ?? await checkoutPolicy(c);
   const items = (await c.query(
-    `SELECT ci.variant_id, ci.qty, v.price_vnd, v.weight_gram, v.title AS variant_title, v.sku, p.title AS product_title, p.slug,
+    `SELECT ci.variant_id, ci.qty, v.price_vnd, v.weight_gram, v.title AS variant_title, v.sku, p.id AS product_id, p.title AS product_title, p.slug,
             pe.price_vnd AS sale_price_vnd, pe.off_pct AS sale_off_pct,
             (SELECT m.public_key FROM media m WHERE m.product_id = p.id ORDER BY m.position, m.created_at LIMIT 1) AS image_key
        FROM cart_items ci JOIN variants v ON v.id = ci.variant_id JOIN products p ON p.id = v.product_id
@@ -343,13 +387,18 @@ async function summarize(c, cartId, province = null, coords = null, customerId =
     `SELECT count(*)::int n FROM cart_items ci JOIN variants v ON v.id = ci.variant_id
       WHERE ci.cart_id = $1 AND NOT (${VARIANT_NOT_ORPHAN_SQL})`, [cartId])).rows[0].n);
   let subtotal = 0;
+  const qb = await qtyBreaksFor(c, items);
   const out = items.map((it) => {
-    // GIÁ HIỆU LỰC: promo_effective (flash sale 0082) NẾU đang chạy, không thì giá gốc variants.
-    const base = Number(it.price_vnd);
-    const unit = it.sale_price_vnd != null ? Number(it.sale_price_vnd) : base;
+    // GIÁ HIỆU LỰC: thấp nhất giữa giá gốc, flash sale (0082) và bậc số lượng (0188) — lineUnit.
+    const { base, unit, src } = lineUnit(it, qb);
     subtotal += unit * it.qty;
-    return { variant_id: it.variant_id, product_title: it.product_title, variant_title: it.variant_title, sku: it.sku, unit_price_vnd: unit, qty: it.qty, line_total_vnd: unit * it.qty, image: imgUrl(it.image_key),
-      ...(it.sale_price_vnd != null ? { orig_unit_price_vnd: base, sale_off_pct: Number(it.sale_off_pct) } : {}) };
+    const q = qb.get(it.product_id);
+    return { variant_id: it.variant_id, product_id: it.product_id, product_title: it.product_title, variant_title: it.variant_title, sku: it.sku, unit_price_vnd: unit, qty: it.qty, line_total_vnd: unit * it.qty, image: imgUrl(it.image_key),
+      ...(src === 'sale' ? { orig_unit_price_vnd: base, sale_off_pct: Number(it.sale_off_pct) } : {}),
+      ...(src === 'qty' ? { orig_unit_price_vnd: base, sale_off_pct: Math.round((base - unit) * 100 / base), qty_break: true } : {}),
+      // Nhắc bậc kế tiếp chỉ khi bậc đó THẬT SỰ rẻ hơn giá dòng đang trả — nhắc một bậc đắt hơn
+      // flash sale đang chạy là mời khách mua thêm để trả nhiều tiền hơn.
+      ...(q?.next && q.next.price_vnd < unit ? { qty_break_next: { more: q.next.min_qty - q.count, price_vnd: q.next.price_vnd } } : {}) };
   });
   const cfg = await shopShipping(c);
   const { coordsValid, distanceMeters } = resolveShipDistance(cfg, coords);
@@ -920,7 +969,7 @@ async function createOrderTx(c, ctx, token, idemKey, f) {
     // Phòng thủ nhiều lớp: loại biến thể MỒ CÔI khỏi đơn (đã vào giỏ TRƯỚC khi shop thu hẹp
     // phân loại) — không bao giờ reserve/snapshot theo giá/tồn cũ. Giỏ rỗng ra → fail dưới.
     const items = (await c.query(
-      `SELECT ci.variant_id, ci.qty, v.price_vnd, v.weight_gram, v.title AS variant_title, v.sku, p.title AS product_title,
+      `SELECT ci.variant_id, ci.qty, v.price_vnd, v.weight_gram, v.title AS variant_title, v.sku, p.id AS product_id, p.title AS product_title,
               pe.price_vnd AS sale_price_vnd, pe.promotion_id
          FROM cart_items ci JOIN variants v ON v.id = ci.variant_id JOIN products p ON p.id = v.product_id
          LEFT JOIN LATERAL promo_effective(p.id, v.price_vnd, now()) pe ON true
@@ -981,6 +1030,8 @@ async function createOrderTx(c, ctx, token, idemKey, f) {
     // Khoá tồn + reserve + snapshot. Giá lấy từ variants (server-side). (Biến thể đã khoá ở trên.)
     let subtotal = 0;
     const lines = [];
+    // Bậc số lượng tính SAU khi đã khoá tồn và trên đúng tập dòng sẽ vào đơn (cùng hàm với summarize).
+    const qb = await qtyBreaksFor(c, items);
     for (const it of items) {
       // TỒN AN TOÀN (0140): chặn ở ĐÂY, trong transaction đang giữ FOR UPDATE — cùng chỗ với
       // hàng rào chống oversell cũ. Không đặt bằng CHECK của DB được vì tỉ lệ nằm ở bảng
@@ -1000,11 +1051,12 @@ async function createOrderTx(c, ctx, token, idemKey, f) {
       await c.query(`UPDATE inventory_levels SET reserved = reserved + $2, updated_at = now() WHERE variant_id = $1`, [it.variant_id, it.qty]);
       // GIÁ HIỆU LỰC = flash sale (0082) nếu đang chạy TẠI now() của tx, không thì giá gốc.
       // orig = giá gốc CHỈ khi có sale (snapshot thông tin — không cộng vào tiền nào).
-      const base = Number(it.price_vnd);
-      const unit = it.sale_price_vnd != null ? Number(it.sale_price_vnd) : base;
+      // + bậc số lượng (0188): lineUnit lấy giá thấp nhất. orig = giá gốc khi CÓ giảm (sale hoặc
+      // bậc); promotion_id chỉ khi flash sale thắng — bậc số lượng không phải một chương trình.
+      const { base, unit, src } = lineUnit(it, qb);
       subtotal += unit * it.qty;
       lines.push({ variant_id: it.variant_id, title: it.product_title + (it.variant_title ? ` - ${it.variant_title}` : ''), sku: it.sku, unit, qty: it.qty,
-        orig: it.sale_price_vnd != null ? base : null, promotion_id: it.sale_price_vnd != null ? it.promotion_id : null });
+        orig: src ? base : null, promotion_id: src === 'sale' ? it.promotion_id : null });
     }
     // Vòng trung thực GIÁ no-JS: subtotal (đã sale, trước coupon) khách ĐÃ THẤY (hidden
     // subtotal_seen) khác subtotal tính lại tại now() (promo vừa hết → tăng, hoặc vừa bật →

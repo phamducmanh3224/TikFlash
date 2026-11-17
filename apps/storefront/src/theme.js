@@ -1651,6 +1651,12 @@ a.sort-link:hover{border-color:var(--color-primary);color:var(--color-primary);b
 .stock{display:inline-flex;align-items:center;gap:6px;font-size:.9rem;font-weight:700;padding:6px 14px;border-radius:var(--pill);margin:0 0 18px}
 .stock.in{background:var(--color-hero-bg);color:color-mix(in srgb,var(--color-primary) 82%,#000)}
 .stock.low{background:#fff7ed;color:#c2410c}
+.qb{margin:0 0 18px;border:1px solid var(--bd,#e5e7eb);border-radius:12px;padding:10px 14px;font-size:.92rem}
+.qb-h{font-weight:700;margin:0 0 6px}
+.qb ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.qb li{display:flex;justify-content:space-between;gap:12px}
+.qb-p{font-weight:700;color:#b91c1c}
+.qb-note{margin:6px 0 0;font-size:.84rem;opacity:.8}
 .stock.out{background:#fef2f2;color:#b91c1c}
 .soldout-note{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:var(--r);padding:14px 16px;font-weight:600;margin:0 0 22px}
 .card .soldout-tag{position:absolute;top:10px;left:10px;z-index:1;background:rgba(17,24,39,.82);color:#fff;font-size:.76rem;font-weight:600;padding:4px 10px;border-radius:var(--pill);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
@@ -2771,6 +2777,14 @@ export function renderProduct(ctx, p, { canonical = null } = {}) {
   const price = saleNow != null ? saleNow : base;
   // Khung giờ flash sale — text TĨNH (không countdown JS, hợp CSP). ends_at giờ VN.
   const promoText = (saleNow != null && p.promo) ? `<div class="flash-sale" style="margin:8px 0;font-weight:600;color:#e11d48">⚡ Flash sale${p.promo.title ? ' · ' + esc(p.promo.title) : ''} — đến ${esc(new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }).format(new Date(p.promo.ends_at)))}</div>` : '';
+  // Giá theo số lượng (0188). Chỉ in bậc RẺ HƠN giá đang hiện: checkout lấy giá thấp nhất giữa
+  // giá biến thể, flash sale và bậc, nên một bậc đắt hơn flash sale đang chạy là bậc không bao
+  // giờ áp — in nó ra là hứa một khoản giảm không có thật.
+  // Câu "size, màu nào cũng được" là luật thật (checkout gộp mọi biến thể của sản phẩm), và là
+  // thứ khách sỉ cần biết nhất: không có nó họ tưởng phải lấy cùng một size.
+  const qbRows = (p.qty_breaks ?? []).filter((t) => t.price_vnd < Number(price));
+  const qtyBreakHtml = qbRows.length ? `<div class="qb"><p class="qb-h">Mua nhiều giá rẻ hơn</p><ul>${qbRows.map((t) =>
+    `<li><span>Mua từ ${esc(t.min_qty)} cái</span><span class="qb-p">${money(t.price_vnd)}/cái</span></li>`).join('')}</ul>${variants.length > 1 ? '<p class="qb-note">Cộng chung mọi size, màu của mẫu này.</p>' : ''}</div>` : '';
   const selAvail = selected ? av(selected) : 0;
   const totalAvail = variants.reduce((s, v) => s + av(v), 0);
   const soldOut = totalAvail <= 0;
@@ -2928,6 +2942,7 @@ export function renderProduct(ctx, p, { canonical = null } = {}) {
             <meta itemprop="priceCurrency" content="VND"><link itemprop="availability" href="${availability}">
           </div>
           ${promoText}
+          ${qtyBreakHtml}
           ${stockBadge}
           ${selector}
           ${actions}
