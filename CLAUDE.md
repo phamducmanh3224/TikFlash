@@ -25,11 +25,11 @@ tenant bằng **RLS**. Tất cả chạy bằng Docker Compose.
 |---|---:|---|
 | dòng mã ứng dụng | ~50.700 | `apps/*/src/*.js` |
 | dòng test | ~38.800 | `apps/*/test/*.{js,mjs}` |
-| migration | 185 tệp, mới nhất `0187` | `packages/db/migrations/` |
+| migration | 186 tệp, mới nhất `0188` | `packages/db/migrations/` |
 | bộ unit | 45 | `MANIFEST_UNIT_COUNT` |
-| bộ e2e | 114 | `MANIFEST_E2E_COUNT` |
+| bộ e2e | 115 | `MANIFEST_E2E_COUNT` |
 | bất biến DB | 9 bộ, 152 test TAP | `packages/db/test/*.test.js` |
-| tài liệu | 84 tệp | `docs/` |
+| tài liệu | 85 tệp | `docs/` |
 
 Tỉ lệ test/mã ≈ 0,73 — cao có chủ ý, xem §4.
 
@@ -75,7 +75,7 @@ với GitHub CI. Nó tự dựng PostgreSQL trắng trong project Compose riêng
 chạy đúng runner production **không seed**, rồi so ba chiều: số file = `MANIFEST_MIGRATION_COUNT`
 = số dòng thật trong `schema_migrations`, kèm 0 DRIFT / 0 pending. Tự dọn bằng `trap` ở mọi đường
 thoát, kể cả Ctrl-C. **Không chạm DB dev.** Thêm migration thì sửa `MANIFEST_MIGRATION_COUNT`
-trong cùng commit — đếm theo **FILE**, không theo số thứ tự (hôm nay 185 file / số cao nhất 0187).
+trong cùng commit — đếm theo **FILE**, không theo số thứ tự (hôm nay 186 file / số cao nhất 0188).
 
 Hook `scripts/hooks/pre-push` chạy `--fast` và **chặn push khi đỏ**. Cài một lần cho mỗi bản
 clone: `git config core.hooksPath scripts/hooks`.
@@ -88,7 +88,7 @@ clone: `git config core.hooksPath scripts/hooks`.
 apps/<service>/src/     mã service        apps/<service>/test/    test của nó
 packages/               mã DÙNG CHUNG     packages/db/migrations/ toàn bộ SQL
 infra/compose.*.yml     dàn dịch vụ       scripts/                cổng, seed, vận hành
-docs/                   84 tệp ghi chép   .github/workflows/ci.yml cổng đám mây
+docs/                   85 tệp ghi chép   .github/workflows/ci.yml cổng đám mây
 ```
 
 | việc cần sửa | file |
@@ -388,7 +388,7 @@ giá trị nhất khi đọc lại.
 | kiến trúc, dữ liệu, hạ tầng | `docs/01`, `02`, `03`, `06` |
 | **11 quyết định kiến trúc** — đọc trước khi định làm khác | **`docs/04`** |
 | xác thực & quyền | `07`, `08`, `10`, `29`, `59` · **`73` cửa vào + wizard thiết lập đầu tiên** |
-| bán hàng | `11` catalog · `12` kho/ảnh · `13` storefront · `14` checkout · `38` flash sale · `56` biến thể · `82` quán ăn (lời dặn, giờ nhận đơn) · `83` cửa hàng bán lẻ kiểu sàn |
+| bán hàng | `11` catalog · `12` kho/ảnh · `13` storefront · `14` checkout · `38` flash sale · `56` biến thể · `82` quán ăn (lời dặn, giờ nhận đơn) · `83` cửa hàng bán lẻ kiểu sàn · `84` giá theo số lượng |
 | **thiết kế giao diện** | **`44` bảng điều khiển người bán · `72` cửa hàng công khai** — ngân sách token, thang chữ, nhịp 4px · `73` trang đăng nhập/đăng ký |
 | di cư từ sàn khác | `45` khung chung (Shopify/Haravan) · **`70` TikTok Shop — quyết định + số đo** · `71` brief thi công (tự chứa, đưa cho người ngoài) |
 | tiền | `15`,`16` QR · `37` lãi lỗ · `41` điểm · `49` thuê bao · `51`–`53` săn lỗ tiền · `54` sửa đơn · `55` tiền lạc · `66` công nợ · `67` tranh chấp · `68` email · `69` phí ship |
@@ -1955,6 +1955,18 @@ Hai lỗi có từ trước tìm ra bằng probe và đã vá: trang SP cuộn n
 form đánh giá rộng nội tại 378px. Còn nợ: chân trang luôn ghi "Chuyển khoản QR" kể cả shop chưa
 bật QR; `scripts/probe-360.mjs` báo đỏ giả cho ô `.hp`/checkbox 1px trên cửa hàng và đường dẫn
 Chromium mặc định đã cũ (đặt `PROBE_CHROME`).
+
+### Giá theo số lượng (`0188`) — nhánh `claude/gia-theo-so-luong`, nối từ PR #7, CHƯA MERGE
+
+Chủ dự án (17/11) cần "mua càng nhiều càng rẻ" cho mùa Tết, giống "Giá khi mua nhiều" của MePOS.
+Chủ dự án chọn đếm **gộp mọi size/màu của một sản phẩm**; các luật còn lại (giá tuyệt đối, bậc
+cao nhất áp cho cả số lượng, lấy giá thấp nhất với flash sale chứ không cộng dồn) chi tiết ở
+`docs/84`. Nhánh nối từ `claude/project-thread-ba2ia3` (PR #7) vì đó là bản mới nhất chủ dự án
+đang dùng; merge PR #7 trước rồi mới tới nhánh này.
+
+Đo: `qty-breaks.e2e.mjs` **24/24**, ma trận **5/5 đột biến đỏ**. Còn nợ: đơn tay và đơn qua bot
+chưa áp bậc (đọc `promo_effective` riêng), thẻ lưới chưa có nhãn. **Lát cắt này Claude vừa đo,
+vừa viết, vừa tuyên bố xanh** — chưa có vòng chéo §9.1.
 
 ### 9.4 Bắt đầu một phiên mới thế nào
 

@@ -124,6 +124,8 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--pri);box
 .cl-meta{grid-area:meta;min-width:0;line-height:1.45}
 .cl-tot{grid-area:tot;white-space:nowrap;font-variant-numeric:tabular-nums}
 .cl-ctl{grid-area:ctl;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 0}
+.qb-tag{display:inline-block;margin-left:4px;padding:0 6px;border-radius:var(--pill);border:1px solid currentColor;color:#b91c1c;font-size:.78rem;font-weight:600}
+.qb-next{margin-top:4px;font-size:.86rem;color:var(--ink)}
 .stepper{display:inline-flex;align-items:center;border:1.5px solid var(--bd);border-radius:var(--pill);background:var(--card)}
 .stp{width:42px;height:40px;padding:0;border:0;border-radius:var(--pill);background:none;color:var(--ink);font:inherit;font-size:1.2rem;font-weight:600;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 .stp:hover{background:var(--wash);color:var(--pri)}
@@ -211,7 +213,11 @@ function page(title, shopName, bodyHtml, extraHead = '', bodyClass = '') {
 // cũng không có đường gửi-bằng-Enter mang qty rỗng. Trần 1000 khớp chốt của updateItemForm:
 // để nút "+" gửi 1001 là mời khách vào một trang lỗi 400.
 const QTY_MAX = 1000;
-const itemsBlock = (items) => items.map((it) => {
+// Lời nhắc bậc kế tiếp chỉ in ở dòng ĐẦU của mỗi sản phẩm: ba size cùng mẫu là ba dòng, mà
+// câu "mua thêm 2 cái" nói về cả mẫu — in ba lần đọc thành phải mua thêm 6.
+const itemsBlock = (items) => { const daNhac = new Set(); return items.map((it) => {
+  const nhac = it.qty_break_next && !daNhac.has(it.product_id);
+  if (nhac) daNhac.add(it.product_id);
   const ten = esc(it.product_title) + (it.variant_title ? ` — ${esc(it.variant_title)}` : '');
   const q = Number(it.qty);
   return `
@@ -219,7 +225,8 @@ const itemsBlock = (items) => items.map((it) => {
     ${it.image ? `<img class="cthumb" src="${esc(it.image)}" alt="" loading="lazy" width="52" height="52">` : '<div class="cthumb ph"></div>'}
     <div class="cl-meta">
       <div>${esc(it.product_title)}${it.variant_title ? ` — <span class="muted">${esc(it.variant_title)}</span>` : ''}</div>
-      <div class="muted">${it.orig_unit_price_vnd ? `<s>${money(it.orig_unit_price_vnd)}</s> <span style="color:#b91c1c;font-weight:600">${money(it.unit_price_vnd)}</span> <span style="color:#b91c1c">-${esc(it.sale_off_pct)}%</span>` : money(it.unit_price_vnd)} / sp</div>
+      <div class="muted">${it.orig_unit_price_vnd ? `<s>${money(it.orig_unit_price_vnd)}</s> <span style="color:#b91c1c;font-weight:600">${money(it.unit_price_vnd)}</span> <span style="color:#b91c1c">-${esc(it.sale_off_pct)}%</span>` : money(it.unit_price_vnd)} / sp${it.qty_break ? ' <span class="qb-tag">giá mua nhiều</span>' : ''}</div>
+      ${nhac ? `<div class="qb-next">Mua thêm ${esc(it.qty_break_next.more)} cái cùng mẫu (size, màu nào cũng được) để được ${money(it.qty_break_next.price_vnd)}/cái</div>` : ''}
     </div>
     <div class="cl-tot"><strong>${money(it.line_total_vnd)}</strong></div>
     <form method="POST" action="/cart/update" class="cl-ctl">
@@ -232,7 +239,7 @@ const itemsBlock = (items) => items.map((it) => {
       <button class="it-del" type="submit" name="qty" value="0" aria-label="Xoá ${ten} khỏi giỏ">Xoá</button>
     </form>
   </div>`;
-}).join('');
+}).join(''); };
 
 // Món KHÔNG CÒN BÁN nằm trong giỏ (biến thể mồ côi: shop thu hẹp phân loại sau khi khách đã
 // thêm vào giỏ). Chúng bị loại khỏi tổng tiền — phải NÓI RA, vì lặng lẽ bớt món là khách

@@ -396,7 +396,11 @@ async function getProduct(res, ctx, _body, params) {
       [productId],
     );
     const specs = await c.query(`SELECT id, name, value, position FROM product_specs WHERE product_id = $1 ORDER BY position`, [productId]);
-    return { ...p.rows[0], variants: variants.rows, category_ids: cats.rows.map((r) => r.category_id), options: options.rows, specs: specs.rows };
+    // Giá theo số lượng (0188). Số trả ra là SỐ (bigint của pg về dạng chuỗi), để giao diện
+    // và test không phải đoán kiểu.
+    const qb = await c.query(`SELECT min_qty, price_vnd FROM product_qty_breaks WHERE product_id = $1 ORDER BY min_qty`, [productId]);
+    return { ...p.rows[0], variants: variants.rows, category_ids: cats.rows.map((r) => r.category_id), options: options.rows, specs: specs.rows,
+      qty_breaks: qb.rows.map((r) => ({ min_qty: Number(r.min_qty), price_vnd: Number(r.price_vnd) })) };
   });
   if (!row) return send(res, 404, { error: 'không tìm thấy sản phẩm' });
   return send(res, 200, row);
@@ -895,6 +899,68 @@ async function setProductSpecs(res, ctx, body, params) {
   return send(res, 200, { ok: true, count: out.n });
 }
 
+// ── giá theo số lượng (0188) ─────────────────────────────────────────────────
+// Luật kiểm lấy theo "Giá khi mua nhiều" của MePOS (qtyBreakPricesIssue) để người bán dùng cả
+// hai không gặp hai bộ luật: tối đa 5 bậc · "mua từ" > 1 và tăng dần · giá > 0 và GIẢM dần ·
+// giá bậc phải thấp hơn giá bán. "Giá bán" ở đây là giá CAO NHẤT của các biến thể: bậc chỉ cần
+// rẻ hơn ít nhất một biến thể mới có tác dụng; với biến thể đã rẻ hơn bậc thì checkout giữ giá
+// biến thể (lấy giá thấp hơn), nên bậc không bao giờ làm một dòng đắt lên.
+//
+// Báo lỗi theo THỨ TỰ NGƯỜI BÁN GÕ (mức 1, mức 2…), không theo thứ tự đã sắp — câu "mức 2 sai"
+// phải chỉ đúng dòng thứ hai trên màn hình họ đang nhìn.
+export const MAX_QTY_BREAKS = 5;
+export function qtyBreaksIssue(rows, maxPrice) {
+  if (rows.length > MAX_QTY_BREAKS) return `tối đa ${MAX_QTY_BREAKS} mức giá theo số lượng`;
+  let prev = null;
+  for (let i = 0; i < rows.length; i++) {
+    const { min_qty: q, price_vnd: pr } = rows[i];
+    const nhan = `mức ${i + 1}`;
+    if (!Number.isInteger(q) || q < 2 || q > 100000) return `${nhan}: "mua từ" phải là số nguyên từ 2 trở lên`;
+    if (!Number.isInteger(pr) || pr <= 0) return `${nhan}: giá mỗi cái phải là số nguyên lớn hơn 0`;
+    if (maxPrice != null && pr >= maxPrice) return `${nhan}: giá mỗi cái phải thấp hơn giá bán (${maxPrice.toLocaleString('vi-VN')}₫)`;
+    if (prev && q <= prev.min_qty) return `${nhan}: "mua từ" phải nhiều hơn mức trên (${prev.min_qty})`;
+    if (prev && pr >= prev.price_vnd) return `${nhan}: giá phải thấp hơn mức trên (${prev.price_vnd.toLocaleString('vi-VN')}₫)`;
+    prev = { min_qty: q, price_vnd: pr };
+  }
+  return '';
+}
+
+async function setProductQtyBreaks(res, ctx, body, params) {
+  const productId = params[1];
+  const raw = Array.isArray(body.qty_breaks) ? body.qty_breaks : null;
+  if (!raw) return send(res, 400, { error: 'thiếu danh sách qty_breaks' });
+  // Dòng TRỐNG CẢ HAI Ô là dòng bấm thêm rồi bỏ đó — bỏ qua, không bắt lỗi (như MePOS).
+  // Ô có chữ không phải số thì giữ NaN để luật kiểm báo đúng dòng, không lặng lẽ thành 0.
+  const toNum = (v) => (v === '' || v == null ? null : Number(String(v).replace(/[.\s₫,]/g, '')));
+  const rows = [];
+  for (const r of raw) {
+    const q = toNum(r?.min_qty), pr = toNum(r?.price_vnd);
+    if (q == null && pr == null) continue;
+    rows.push({ min_qty: q ?? NaN, price_vnd: pr ?? NaN });
+  }
+  const out = await withTenant(ctx.shopId, async (c) => {
+    const p = await c.query(
+      `SELECT (SELECT max(v.price_vnd) FROM variants v WHERE v.product_id = p.id) AS max_price
+         FROM products p WHERE p.id = $1 AND p.deleted_at IS NULL`, [productId]);
+    if (!p.rows.length) return { code: 404 };
+    const maxPrice = p.rows[0].max_price == null ? null : Number(p.rows[0].max_price);
+    const issue = qtyBreaksIssue(rows, maxPrice);
+    if (issue) return { code: 400, error: issue };
+    // Thay trọn bộ trong MỘT transaction: không có khoảnh khắc nào checkout đọc được nửa cũ
+    // nửa mới (bậc 3 của bảng cũ cạnh bậc 10 của bảng mới cho ra giá không ai đặt).
+    await c.query(`DELETE FROM product_qty_breaks WHERE product_id = $1`, [productId]);
+    for (const r of rows) {
+      await c.query(`INSERT INTO product_qty_breaks (shop_id, product_id, min_qty, price_vnd) VALUES (current_shop_id(), $1, $2, $3)`,
+        [productId, r.min_qty, r.price_vnd]);
+    }
+    await audit(c, 'product.qty_breaks_set', { actorId: ctx.user.id, ip: ctx.ip, metadata: { productId, tiers: rows } });
+    return { code: 200 };
+  });
+  if (out.code === 404) return send(res, 404, { error: 'không tìm thấy sản phẩm' });
+  if (out.code === 400) return send(res, 400, { error: out.error });
+  return send(res, 200, { ok: true, qty_breaks: rows });
+}
+
 // ── categories ───────────────────────────────────────────────────────────────
 
 async function listCategories(res, ctx) {
@@ -1045,6 +1111,7 @@ export const CATALOG_ROUTES = [
   { m: 'DELETE', re: new RegExp(`^/shops/${UUID}/products/${UUID}/variants/${UUID}$`), perm: 'catalog.write', fn: (res, ctx, b, p) => deleteVariant(res, ctx, b, p) },
   { m: 'PUT', re: new RegExp(`^/shops/${UUID}/products/${UUID}/options$`), perm: 'catalog.write', fn: (res, ctx, b, p) => saveProductOptions(res, ctx, b, p) },
   { m: 'PUT', re: new RegExp(`^/shops/${UUID}/products/${UUID}/specs$`), perm: 'catalog.write', fn: (res, ctx, b, p) => setProductSpecs(res, ctx, b, p) },
+  { m: 'PUT', re: new RegExp(`^/shops/${UUID}/products/${UUID}/qty-breaks$`), perm: 'catalog.write', fn: (res, ctx, b, p) => setProductQtyBreaks(res, ctx, b, p) },
   { m: 'GET', re: new RegExp(`^/shops/${UUID}/categories$`), perm: 'catalog.read', fn: (res, ctx) => listCategories(res, ctx) },
   { m: 'POST', re: new RegExp(`^/shops/${UUID}/categories$`), perm: 'catalog.write', fn: (res, ctx, b) => createCategory(res, ctx, b) },
   { m: 'PATCH', re: new RegExp(`^/shops/${UUID}/categories/${UUID}$`), perm: 'catalog.write', fn: (res, ctx, b, p) => updateCategory(res, ctx, b, p) },

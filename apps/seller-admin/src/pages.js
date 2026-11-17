@@ -5187,6 +5187,13 @@ export function renderProductDetail(ctx, shopId, p, levels, err, form, media, ca
         <button class="btn alt sm" type="submit">Thêm biến thể</button>
       </form>
     </div>
+    <div class="card"><h2 style="margin-top:0">Giá khi mua nhiều</h2>
+      <p class="muted" style="font-size:.85rem;margin-top:0">Mỗi dòng: <strong>mua từ</strong> bao nhiêu cái thì <strong>giá mỗi cái</strong> bao nhiêu. Số lượng <strong>cộng chung mọi size, màu</strong> của sản phẩm này trong giỏ; cả số lượng tính theo giá của mức cao nhất đã đạt. Nếu đang có flash sale rẻ hơn thì khách được giá rẻ hơn, hai khoản không cộng dồn. Để trống cả dòng để bỏ mức đó.</p>
+      <form method="POST" action="${base}/qty-breaks">
+        <div style="display:grid;gap:8px">${Array.from({ length: 5 }, (_, i) => { const t = (p.qty_breaks ?? [])[i]; return `<div class="inline" style="gap:8px;align-items:end"><div><label for="qb-q-${i}">Mức ${i + 1}: mua từ (cái)</label><input id="qb-q-${i}" name="min_qty_${i}" type="number" min="2" step="1" inputmode="numeric" value="${t ? esc(t.min_qty) : ''}" style="width:130px"></div><div><label for="qb-p-${i}">Giá mỗi cái (đ)</label><input id="qb-p-${i}" name="price_vnd_${i}" type="number" min="1" step="1" inputmode="numeric" value="${t ? esc(t.price_vnd) : ''}" style="width:150px"></div></div>`; }).join('')}</div>
+        <button class="btn sm" type="submit" style="margin-top:10px">Lưu giá khi mua nhiều</button>
+      </form>
+    </div>
     <div class="card"><h2 style="margin-top:0">Thông số kỹ thuật</h2>
       <form method="POST" action="${base}/specs">
         <label>Mỗi dòng một thông số, dạng <code>Tên: Giá trị</code></label>
